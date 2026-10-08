@@ -19,3 +19,19 @@ def save_password(password):
     path=password_path()
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(password,encoding='utf-8')
+
+def load_settings():
+    import json
+    try:
+        data=json.loads((password_path().parent/'settings.json').read_text(encoding='utf-8'))
+        return data if isinstance(data,dict) else {}
+    except (OSError,ValueError):
+        return {}
+
+def save_settings(settings):
+    import json
+    path=password_path().parent/'settings.json'
+    path.parent.mkdir(parents=True,exist_ok=True)
+    temporary=path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(settings,indent=2),encoding='utf-8')
+    temporary.replace(path)
