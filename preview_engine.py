@@ -21,7 +21,7 @@ class PreviewEngine:
         try: self.frames.put_nowait(value)
         except queue.Full: pass
     def _run(self):
-        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False
+        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False; ready=False; position=0.
         try:
             while not self.stop.is_set():
                 commands=[]
@@ -43,12 +43,12 @@ class PreviewEngine:
                                 factory=MediaPlayer
                             player=factory(value,ff_opts={'out_fmt':'rgb24','volume':0.7})
                             player.set_size(640,-1); player.set_mute(True)
-                            first=True; paused=False; duration=0.; eof=False
-                        elif player and generation==token:
+                            first=True; paused=False; duration=0.; eof=False; ready=False; position=0.
+                        elif player and generation==token and ready:
                             if kind=='toggle':
                                 if eof: player.seek(0,relative=False); eof=False
                                 paused=not paused; player.set_pause(paused)
-                                self.publish((token,'state',(None,player.get_pts(),duration,paused)))
+                                self.publish((token,'state',(None,position,duration,paused)))
                             elif kind=='seek':
                                 player.seek(float(value),relative=False); eof=False
                                 player.set_pause(False); first=True
@@ -70,6 +70,7 @@ class PreviewEngine:
                         self.publish((token,'state',(None,duration,duration,True))); continue
                     if frame:
                         pixels,pts=frame
+                        position=pts; ready=True
                         image=Image.frombytes('RGB',pixels.get_size(),bytes(pixels.to_bytearray()[0]))
                         if first:
                             player.set_pause(True); player.set_mute(muted)
