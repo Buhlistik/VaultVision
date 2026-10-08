@@ -3,3 +3,4 @@ websocket-client>=1.8,<2
 psutil>=6,<8
 ffpyplayer==4.5.3
 pywinauto>=0.6.9,<0.7; sys_platform == "win32"
+mss>=10.2,<11

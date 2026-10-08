@@ -4,6 +4,7 @@ from tkinter import ttk
 from PIL import Image
 from detector import Detector,crop,ocr,FEED,NAME
 from obs_client import OBS
+from capture import Capture
 from screen_reader import ScreenReader,replay_description
 from game_state import GameGate,read_name,spectator_present,health_present,SPECTATOR
 from local_settings import load_password,save_password,password_path,load_settings,save_settings
@@ -14,8 +15,9 @@ class App:
         self.root=root; root.title('VaultVision 0.1 — prototype'); self.stop=threading.Event(); self.manual=threading.Event(); self.messages=queue.Queue(); self.worker=None; self.shutdown=threading.Event(); self.saved_clips=queue.Queue(); self.clip_labels=queue.Queue(); self.obs_password=''; self.obs_ready=False; self.auto_started=False; self.game_armed=False 
         self.source=tk.StringVar(value='Dark and Darker'); self.password=tk.StringVar(); self.name=tk.StringVar(); self.after=tk.StringVar(value='0'); self.tesseract=tk.StringVar(value=r'C:\Program Files\Tesseract-OCR\tesseract.exe')
         self.hud_timeout=tk.StringVar(value='30')
+        self.capture_method=tk.StringVar(value='obs'); self.monitor=tk.StringVar(value='1')
         self.settings=load_settings()
-        for key,var in [('source',self.source),('character_override',self.name),('save_delay',self.after),('tesseract',self.tesseract),('hud_timeout',self.hud_timeout)]:
+        for key,var in [('source',self.source),('character_override',self.name),('save_delay',self.after),('tesseract',self.tesseract),('hud_timeout',self.hud_timeout),('capture_method',self.capture_method),('monitor',self.monitor)]:
             value=self.settings.get(key)
             if isinstance(value,(str,int,float)): var.set(str(value))
         try: self.password.set(load_password())
@@ -118,14 +120,23 @@ class App:
             if not math.isfinite(timeout) or not 1<=timeout<=600:
                 self.say('HUD-absence timeout must be 1–600 seconds.'); return
         except ValueError: self.say('After-event delay must be 0–30 seconds.'); return
-        args=(self.source.get(),self.password.get(),self.name.get(),delay,self.tesseract.get(),timeout)
+        method=self.capture_method.get().strip().lower()
+        if method not in ('screen','obs'):
+            self.say('Capture method must be screen or obs.'); return
+        try:
+            monitor=int(self.monitor.get())
+            if monitor<1: raise ValueError()
+        except ValueError:
+            self.say('Monitor must be a positive whole number.'); return
+        args=(self.source.get(),self.password.get(),self.name.get(),delay,self.tesseract.get(),timeout,method,monitor)
         self.auto_started=True; self.stop.clear(); self.manual.clear(); self.worker=threading.Thread(target=self.run,args=args,daemon=True); self.worker.start()
-    def run(self,source,password,name,delay,executable,timeout):
-        obs=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; gate=GameGate(missing_seconds=timeout); reader=ScreenReader()
+    def run(self,source,password,name,delay,executable,timeout,method='obs',monitor=1):
+        obs=None; capture=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; gate=GameGate(missing_seconds=timeout); reader=ScreenReader()
         try:
             obs=OBS(password)
             if not obs.request('GetReplayBufferStatus')['outputActive']: obs.request('StartReplayBuffer')
-            obs.request('GetSourceScreenshot',sourceName=source,imageFormat='png',imageWidth=1920,imageHeight=1080)
+            capture=Capture(obs,source,method,monitor,self.say)
+            capture.grab()
             self.say(f'Automatic monitoring started. Save delay: {delay:.1f}s. Waiting for your gameplay HUD.')
             while not self.stop.is_set():
                 now=time.monotonic(); scan_started=now
@@ -133,9 +144,8 @@ class App:
                     self.manual.clear(); self.request_save(obs,'Manual'); self.say('Manual replay save requested.')
                 if due is not None and now>=due:
                     self.request_save(obs,due_label); self.say('Event replay save requested; check the OBS output folder.'); due=None
-                data=obs.request('GetSourceScreenshot',sourceName=source,imageFormat='png',imageWidth=1920,imageHeight=1080)['imageData']
+                image=capture.grab()
                 capture_done=time.monotonic()
-                image=Image.open(io.BytesIO(base64.b64decode(data.split(',',1)[1])))
                 feed_started=time.monotonic()
                 # Run feed OCR alongside the HUD checks, then gate events.
                 hud_name,health,spectator,feed_text=reader.read(image,executable,gate.armed)
@@ -176,6 +186,7 @@ class App:
         finally:
             self.game_armed=False
             reader.close()
+            if capture: capture.close()
             if obs: obs.close()
             self.say('Disarmed. OBS replay buffer remains under your control.')
     def close(self):
@@ -183,7 +194,8 @@ class App:
         try:
             save_settings({'source':self.source.get(),'character_override':self.name.get(),
                            'save_delay':self.after.get(),'tesseract':self.tesseract.get(),
-                           'hud_timeout':self.hud_timeout.get(),'window_geometry':self.root.geometry(),
+                           'hud_timeout':self.hud_timeout.get(),'capture_method':self.capture_method.get(),
+                           'monitor':self.monitor.get(),'window_geometry':self.root.geometry(),
                            'muted':self.gallery.muted,'volume':self.gallery.volume.get()})
             save_password(self.password.get())
         except (OSError,ValueError):

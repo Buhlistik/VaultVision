@@ -64,7 +64,7 @@ def build_ui(app):
     label(settings,'CAPTURE SETTINGS',GOLD,('Segoe UI',10,'bold')).grid(row=0,columnspan=2,sticky='w',pady=(0,12))
     settings.columnconfigure(1,weight=1)
     app.entries=[]
-    fields=[('OBS source',app.source),('WebSocket password',app.password),
+    fields=[('Capture method (screen / obs)',app.capture_method),('Screen monitor',app.monitor),('OBS source',app.source),('WebSocket password',app.password),
             ('Character override',app.name),('Save delay (seconds)',app.after),('HUD absence timeout (seconds)',app.hud_timeout),
             ('Tesseract executable',app.tesseract)]
     for row,(title,var) in enumerate(fields,1):
@@ -72,7 +72,7 @@ def build_ui(app):
         entry=ttk.Entry(settings,textvariable=var,show='●' if var is app.password else '')
         entry.grid(row=row,column=1,sticky='ew',pady=6)
         app.entries.append(entry)
-    actions=tk.Frame(settings,bg=PANEL); actions.grid(row=7,columnspan=2,sticky='e',pady=(10,0))
+    actions=tk.Frame(settings,bg=PANEL); actions.grid(row=len(fields)+1,columnspan=2,sticky='e',pady=(10,0))
     ttk.Button(actions,text='Save password',command=app.store_password).pack(side='left',padx=(0,8))
     ttk.Button(actions,text='Open password file',command=app.open_password_file).pack(side='left')
     activity=tk.Frame(right,bg=PANEL,highlightbackground=EDGE,highlightthickness=1,padx=20,pady=16)
