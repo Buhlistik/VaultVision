@@ -12,7 +12,7 @@ GOLD='#c7a96b'
 def build_ui(app):
     root=app.root
     root.title('VaultVision • Dark and Darker')
-    root.geometry('1320x840'); root.minsize(1120,760)
+    root.geometry('1480x850'); root.minsize(1240,760)
     root.configure(bg=BG)
     style=ttk.Style(root); style.theme_use('clam')
     style.configure('.',font=('Segoe UI',10),background=PANEL,foreground=TEXT)
@@ -39,7 +39,7 @@ def build_ui(app):
     app.status_label.pack(side='right')
     tk.Frame(root,bg=EDGE,height=1).pack(fill='x',padx=28)
     body=tk.Frame(root,bg=BG,padx=28,pady=22); body.pack(fill='both',expand=True)
-    body.columnconfigure(0,weight=0); body.columnconfigure(1,weight=1); body.columnconfigure(2,weight=1)
+    body.columnconfigure(0,weight=0); body.columnconfigure(1,weight=1); body.columnconfigure(2,weight=3, minsize=470)
     body.rowconfigure(0,weight=1)
     left=tk.Frame(body,bg=PANEL,highlightbackground=EDGE,highlightthickness=1,padx=22,pady=22)
     left.grid(row=0,column=0,sticky='ns',padx=(0,18))
