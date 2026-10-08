@@ -41,3 +41,30 @@ class ResizeTests(unittest.TestCase):
             while player.sizes[-1]!=(960,-1) and time.monotonic()<deadline: time.sleep(.005)
             self.assertEqual(player.sizes[-1],(960,-1))
         finally: engine.close(); engine.thread.join(2)
+
+class ResizePixels:
+    def __init__(self,width): self.width=width
+    def get_size(self): return self.width,2
+    def to_bytearray(self): return [bytearray(self.width*2*3)]
+class ReadyPlayer(Player):
+    def __init__(self): super().__init__(); self.width=640; self.stale=None
+    def set_size(self,width,height):
+        if width!=self.width: self.stale=self.width
+        self.width=width; super().set_size(width,height)
+    def seek(self,*args,**kwargs): pass
+    def get_metadata(self): return {'duration':60}
+    def get_frame(self):
+        width=self.stale or self.width; self.stale=None
+        return (ResizePixels(width),0),.005
+class PausedResizeTests(unittest.TestCase):
+    def test_paused_resize_discards_old_frame_before_pausing_again(self):
+        import queue
+        player=ReadyPlayer(); engine=PreviewEngine(lambda *args,**kwargs:player)
+        try:
+            engine.open('fixture')
+            self.assertEqual(engine.frames.get(timeout=2)[2][0].width,640)
+            engine.command('size',1920)
+            token,kind,data=engine.frames.get(timeout=2)
+            self.assertEqual(data[0].width,1920)
+            self.assertTrue(data[3])
+        finally: engine.close(); engine.thread.join(2)

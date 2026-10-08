@@ -25,7 +25,7 @@ class PreviewEngine:
         try: self.frames.put_nowait(value)
         except queue.Full: pass
     def _run(self):
-        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False; ready=False; position=0.; volume=.7; last_display=0.; seek_target=None; display_width=640
+        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False; ready=False; position=0.; volume=.7; last_display=0.; seek_target=None; display_width=640; resize_target=None
         try:
             while not self.stop.is_set():
                 commands=[]
@@ -53,7 +53,12 @@ class PreviewEngine:
                             if player:
                                 player.set_size(display_width,-1)
                                 if ready:
-                                    player.set_pause(False); first=True
+                                    resize_target=display_width
+                                    player.set_mute(True); player.set_pause(False)
+                                    if paused:
+                                        player.seek(max(0,min(position,max(0,duration-.05))),relative=False,accurate=True)
+                                        seek_target=max(0,min(position,max(0,duration-.05)))
+                                    first=True; eof=False
                             continue
                         if kind=='volume':
                             volume=max(0,min(1,float(value)))
@@ -73,7 +78,7 @@ class PreviewEngine:
                                 factory=MediaPlayer
                             player=factory(value,ff_opts={'out_fmt':'rgb24','volume':volume})
                             player.set_size(display_width,-1); player.set_mute(True)
-                            first=True; paused=True; duration=0.; eof=False; ready=False; position=0.; seek_target=None
+                            first=True; paused=True; duration=0.; eof=False; ready=False; position=0.; seek_target=None; resize_target=None
                         elif player and generation==token and ready:
                             if kind=='toggle':
                                 if eof:
@@ -105,6 +110,9 @@ class PreviewEngine:
                         self.publish((token,'state',(None,duration,duration,True))); continue
                     if frame:
                         pixels,pts=frame
+                        if resize_target is not None and pixels.get_size()[0]!=resize_target:
+                            self.wait(.005); continue
+                        resize_target=None
                         # A seek may leave old frames queued. Do not pause on
                         # those frames before the requested position arrives.
                         if seek_target is not None and abs(pts-seek_target)>.25:
