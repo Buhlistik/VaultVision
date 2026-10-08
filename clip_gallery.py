@@ -167,7 +167,7 @@ class ClipGallery:
         self.full_screen.bind('<Configure>',self.resize)
         self.full_screen.bind('<Button-1>',lambda event:self.toggle())
         self.full_screen.bind('<Double-Button-1>',lambda event:self.exit_fullscreen())
-        controls.lift(); self.full_timeline.lift()
+        controls.lift(); self.full_timeline.tk.call('raise',self.full_timeline._w)
         window.focus_set(); self.resize(); self.draw_progress()
     def exit_fullscreen(self):
         window=self.fullscreen_window
