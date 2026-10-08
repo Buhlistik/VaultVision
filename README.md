@@ -26,8 +26,10 @@ If pausing with a pending highlight, VaultVision requests that replay before sto
 The ten feed rows are OCRed separately. Before the feed fills, new entries append below existing rows. Once full, multiple existing entries confirm upward movement, including several new kills between scans. Earlier clean reads are preserved when the corresponding shifted row becomes unreadable. New kill attribution still requires your exact normalized character name; tolerant matching only associates previously observed entries. Pixel-identical rows reuse OCR results. A lobby reset clears row state. This does not guarantee recovery of text that was never readable.
 
 ## Clip library
-Completed OBS saves appear in the clip library. Import can add existing recordings.
-- Play/pause, restart, volume and timeline scrubbing work in the embedded player.
+Completed OBS saves appear in the clip library. The library shows wrapped clip names with separate event labels and a themed scrollbar.
+- Play/pause, restart, volume, mute and timeline scrubbing work in the embedded player.
+- Fullscreen expands the existing app window on its current monitor; exiting restores its previous size and position.
+- The header shows OBS readiness, match detection, character recognition, killfeed monitoring and pending clip saves. Settings lives at the bottom of the Session panel.
 - **Rename** saves a display title without renaming or rewriting the video file.
 - **Fullscreen** uses the existing decoder. Escape exits, Space toggles playback, and Left/Right seek five seconds.
 - Playback remains paused when selecting a different clip. Video playback can add load while it is active.

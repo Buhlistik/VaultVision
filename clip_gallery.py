@@ -3,8 +3,8 @@ import json,os,queue,math
 from collections import OrderedDict
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk,filedialog,simpledialog,messagebox
-from PIL import ImageTk,ImageOps
+from tkinter import simpledialog,messagebox
+from PIL import ImageTk,ImageOps,Image
 from local_settings import password_path
 from preview_engine import PreviewEngine
 from clip_list import ClipList
@@ -66,9 +66,6 @@ class ClipGallery:
         self.time=tk.Label(bar,text='0:00 / 0:00',bg=BG,fg=MUTED,font=('Segoe UI',10)); self.time.pack(side='right')
         tools=tk.Frame(library,bg='#13161b'); tools.pack(fill='x',pady=(0,10))
         tk.Label(tools,text='SAVED CLIPS',bg='#13161b',fg=GOLD,font=('Segoe UI',9,'bold')).pack(anchor='w',pady=(0,10))
-        tk.Button(tools,text='+  Add videos…',command=self.import_clips,bg='#252931',fg=INK,
-                  activebackground='#373b44',activeforeground=INK,bd=0,pady=8,cursor='hand2',
-                  font=('Segoe UI',10)).pack(fill='x')
         actions=tk.Frame(library,bg='#13161b'); actions.pack(side='bottom',fill='x',pady=(12,0))
         tk.Label(actions,text='SELECTED CLIP',bg='#13161b',fg=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',pady=(0,6))
         self.rename_button=tk.Button(actions,text='Rename clip',command=self.rename_clip,bg='#252931',fg=INK,
@@ -79,7 +76,7 @@ class ClipGallery:
         self.folder_button.pack(fill='x')
         self.list=ClipList(library); self.list.pack(fill='both',expand=True)
         self.list.bind('<<TreeviewSelect>>',self.select); self.refresh()
-        self.job=self.screen.after(30,self.poll)
+        self.job=self.screen.after(16,self.poll)
     def restore_preferences(self,settings):
         value=settings.get('volume',.7)
         if isinstance(value,(int,float)) and math.isfinite(value): self.volume.set(max(0,min(1,value)))
@@ -139,13 +136,21 @@ class ClipGallery:
         if self.fullscreen_window is not None:
             self.exit_fullscreen(); return
         if not self.path: return
-        window=tk.Toplevel(self.screen); self.fullscreen_window=window
-        window.configure(bg='#080a0d'); window.attributes('-fullscreen',True)
-        window.protocol('WM_DELETE_WINDOW',self.exit_fullscreen)
-        window.bind('<Escape>',lambda event:self.exit_fullscreen())
-        window.bind('<space>',lambda event:self.toggle())
-        window.bind('<Left>',lambda event:self.skip(-5))
-        window.bind('<Right>',lambda event:self.skip(5))
+        root=self.screen.winfo_toplevel()
+        self.window_restore=(root.geometry(),root.state(),root.overrideredirect())
+        root.state('normal')
+        if os.name=='nt':
+            from window_layout import monitor_bounds
+            x,y,width,height=monitor_bounds(root.winfo_id())
+            root.overrideredirect(True); root.geometry(f'{width}x{height}{x:+d}{y:+d}')
+        else: root.attributes('-fullscreen',True)
+        window=tk.Frame(root,bg='#080a0d'); self.fullscreen_window=window
+        window.place(x=0,y=0,relwidth=1,relheight=1); window.lift()
+        self.full_bindings={key:root.bind(key,callback,add='+') for key,callback in {
+            '<Escape>':lambda event:self.exit_fullscreen(),
+            '<space>':lambda event:self.toggle(),
+            '<Left>':lambda event:self.skip(-5),
+            '<Right>':lambda event:self.skip(5)}.items()}
         controls=tk.Frame(window,bg=BG,padx=18,pady=10); controls.place(relx=0,rely=1,anchor='sw',relwidth=1,height=50)
         self.full_play=tk.Button(controls,text='Play',command=self.toggle,bg='#252931',fg=INK,bd=0,padx=18,pady=8)
         self.full_play.pack(side='left')
@@ -164,18 +169,24 @@ class ClipGallery:
         self.full_screen.bind('<Button-1>',lambda event:self.toggle())
         self.full_screen.bind('<Double-Button-1>',lambda event:self.exit_fullscreen())
         controls.lift(); self.full_timeline.tk.call('raise',self.full_timeline._w)
-        window.focus_set(); self.resize(); self.draw_progress()
+        root.focus_set(); self.resize(); self.draw_progress()
     def exit_fullscreen(self):
         window=self.fullscreen_window
         self.fullscreen_window=None; self.full_screen=None; self.full_timeline=None; self.full_photo=None
-        if window is not None: window.destroy()
+        if window is not None:
+            root=self.screen.winfo_toplevel()
+            for key,binding in self.full_bindings.items(): root.unbind(key,binding)
+            window.destroy()
+            geometry,state,override=self.window_restore
+            if os.name=='nt': root.overrideredirect(override)
+            else: root.attributes('-fullscreen',False)
+            root.geometry(geometry)
+            if state=='zoomed': root.state('zoomed')
         if not self.closing: self.resize()
     def skip(self,seconds):
         if self.path and self.duration:
             self.position=max(0,min(self.duration,self.position+seconds))
             self.engine.command('seek',self.position); self.draw_progress()
-    def import_clips(self):
-        for path in filedialog.askopenfilenames(filetypes=[('Video files','*.mp4 *.mkv *.mov *.flv *.ts'),('All files','*.*')]): self.add(path,'Imported')
     def select(self,event=None):
         choice=self.list.selection()
         if not choice: return
@@ -216,12 +227,13 @@ class ClipGallery:
         except queue.Empty: pass
         except Exception as exc:
             self.say('Preview display error: '+str(exc))
-        self.job=self.screen.after(30,self.poll)
+        self.job=self.screen.after(16,self.poll)
     def render(self):
         if self.image is None: return
         # One image conversion per frame: fullscreen shares the existing decoder.
         target=self.full_screen if self.full_screen is not None else self.screen
-        image=ImageOps.contain(self.image,(max(1,target.winfo_width()),max(1,target.winfo_height())))
+        size=(max(1,target.winfo_width()),max(1,target.winfo_height()))
+        image=self.image if self.image.size==size else ImageOps.contain(self.image,size,Image.Resampling.BILINEAR)
         photo=ImageTk.PhotoImage(image)
         if self.full_screen is not None: self.full_photo=photo
         else: self.photo=photo
@@ -234,7 +246,9 @@ class ClipGallery:
         self.resize_job=None
         if self.closing: return
         target=self.full_screen if self.full_screen is not None else self.screen
-        width=max(320,min(3840,target.winfo_width()))
+        # Decode only the pixels the video can occupy (letterboxing included).
+        ratio=self.image.width/self.image.height if self.image is not None else 16/9
+        width=max(320,min(1920,target.winfo_width(),int(target.winfo_height()*ratio)))
         if abs(width-self.decoder_width)>=32:
             self.decoder_width=width; self.engine.command('size',width)
     def draw_progress(self):
@@ -274,3 +288,4 @@ class ClipGallery:
         if self.resize_job is not None: self.screen.after_cancel(self.resize_job)
         if self.job: self.screen.after_cancel(self.job)
         self.engine.close()
+

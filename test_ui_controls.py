@@ -119,11 +119,18 @@ class WindowsUITests(unittest.TestCase):
                     self.assertFalse(hasattr(app,'name'))
                     gallery=app.gallery; gallery.path='fixture'; gallery.image=Image.new('RGB',(16,9))
                     original=gallery.engine
+                    root.deiconify(); root.update()
+                    geometry=root.geometry(); windows=[w for w in root.winfo_children() if isinstance(w,tk.Toplevel)]
                     gallery.toggle_fullscreen(); root.update()
                     self.assertIs(gallery.engine,original)
                     self.assertIsNotNone(gallery.fullscreen_window)
+                    self.assertIs(gallery.full_screen.winfo_toplevel(),root)
+                    self.assertEqual([w for w in root.winfo_children() if isinstance(w,tk.Toplevel)],windows)
+                    self.assertEqual(gallery.full_screen.winfo_width(),root.winfo_width())
+                    self.assertEqual(app.save_button.cget('text'),'Manually Save Clip')
                     gallery.exit_fullscreen(); root.update_idletasks()
                     self.assertIsNone(gallery.fullscreen_window)
+                    self.assertEqual(root.geometry(),geometry)
                     self.assertEqual(callback_errors,[])
                 finally:
                     app.gallery.close(); root.destroy()

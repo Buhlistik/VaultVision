@@ -202,6 +202,9 @@ class App:
                                     fg='#c7a96b' if running and not self.user_paused else '#aca79b')
         self.phase_label.configure(text=heading)
         self.detail_label.configure(text=detail)
+        if hasattr(self,'workflow'):
+            stage=0 if not self.obs_ready else 4 if self.pending_save_at is not None else 3 if self.phase=='Watching the killfeed' else 2 if self.phase=='Reading your character name' else 1
+            self.workflow.update_stage(stage,self.user_paused,heading)
         age=time.monotonic()-self.last_scan if self.last_scan else 0
         heartbeat=f'Last screen check {int(age)}s ago · {self.scan_count} checks' if running and self.last_scan else 'Monitoring resumes only when you choose Resume.' if self.user_paused else ''
         if running and self.last_scan and age>8: heartbeat='Screen recognition in progress… '+heartbeat
@@ -327,6 +330,7 @@ class App:
             self.say('Disarmed. OBS replay buffer remains under your control.')
     def close(self):
         if getattr(self,'closing',False): return
+        if self.gallery.fullscreen_window is not None: self.gallery.exit_fullscreen()
         try:
             save_settings({'source':self.source.get(),
                            'save_delay':self.after.get(),'tesseract':self.tesseract.get(),
@@ -378,3 +382,4 @@ if __name__=='__main__':
         traceback.print_exception(kind,value,tb,file=diagnostic_file)
     root.report_callback_exception=callback_error
     App(root); root.mainloop()
+

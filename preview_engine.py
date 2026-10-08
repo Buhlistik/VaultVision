@@ -54,7 +54,7 @@ class PreviewEngine:
                                 player.set_size(display_width,-1)
                                 if ready:
                                     resize_target=display_width
-                                    player.set_mute(True); player.set_pause(False)
+                                    player.set_mute(True); player.set_volume(0); player.set_pause(False)
                                     if paused:
                                         player.seek(max(0,min(position,max(0,duration-.05))),relative=False,accurate=True)
                                         seek_target=max(0,min(position,max(0,duration-.05)))
@@ -62,11 +62,13 @@ class PreviewEngine:
                             continue
                         if kind=='volume':
                             volume=max(0,min(1,float(value)))
-                            if player and ready: player.set_volume(volume)
+                            if player and ready: player.set_volume(0 if muted or first else volume)
                             continue
                         if kind=='mute':
                             muted=bool(value)
-                            if player and ready: player.set_mute(muted)
+                            if player and ready:
+                                player.set_mute(muted or first)
+                                player.set_volume(0 if muted or first else volume)
                             continue
                         if kind=='open':
                             if generation!=self.generation: continue
@@ -76,23 +78,23 @@ class PreviewEngine:
                             else:
                                 from ffpyplayer.player import MediaPlayer
                                 factory=MediaPlayer
-                            player=factory(value,ff_opts={'out_fmt':'rgb24','volume':volume})
+                            player=factory(value,ff_opts={'out_fmt':'rgb24','volume':0,'sync':'audio','framedrop':True})
                             player.set_size(display_width,-1); player.set_mute(True)
                             first=True; paused=True; duration=0.; eof=False; ready=False; position=0.; seek_target=None; resize_target=None
                         elif player and generation==token and ready:
                             if kind=='toggle':
                                 if eof:
-                                    player.set_pause(False); player.set_mute(True)
+                                    player.set_pause(False); player.set_mute(True); player.set_volume(0)
                                     player.seek(0,relative=False); eof=False; first=True; seek_target=0.
                                 paused=not paused
                                 if not first: player.set_pause(paused)
                                 self.publish((token,'state',(None,position,duration,paused)))
                             elif kind=='seek':
-                                player.set_mute(True); player.set_pause(False)
+                                player.set_mute(True); player.set_volume(0); player.set_pause(False)
                                 player.seek(float(value),relative=False,accurate=True); eof=False
                                 first=True; seek_target=float(value)
                             elif kind=='restart':
-                                player.set_mute(True); player.set_pause(False)
+                                player.set_mute(True); player.set_volume(0); player.set_pause(False)
                                 player.seek(0,relative=False)
                                 paused=False; first=True; eof=False; seek_target=0.
                             elif kind=='mute':
@@ -119,21 +121,25 @@ class PreviewEngine:
                             self.wait(.005); continue
                         seek_target=None
                         position=pts
-                        if not ready: player.set_volume(volume)
                         ready=True
                         now=time.monotonic()
-                        display=first or now-last_display>=1/30
+                        # A 1/30 cutoff skips alternate 30fps frames when the
+                        # decoder delivers just before that deadline. Allow
+                        # scheduling jitter while capping expensive RGB copies.
+                        display=first or now-last_display>=.028
                         if first:
                             player.set_pause(paused); player.set_mute(muted)
+                            player.set_volume(0 if muted else volume)
                             first=False
                         if display and token==self.generation:
                             image=Image.frombytes('RGB',pixels.get_size(),bytes(pixels.to_bytearray()[0]))
                             last_display=now
                             self.publish((token,'state',(image,pts,duration,paused)))
-                    delay=.03 if isinstance(wait,str) else max(.005,min(.05,float(wait or .005)))
-                    self.stop.wait(delay)
+                    delay=.02 if isinstance(wait,str) else max(.001,min(.03,float(wait or .001)))
+                    self.wait(delay)
                 except Exception as exc:
                     self.publish((token,'error',str(exc)))
                     player.close_player(); player=None
         finally:
             if player: player.close_player()
+

@@ -114,14 +114,16 @@ def build_ui(app):
     wizard=artwork('wizard.png',(76,76))
     if wizard is not None:
         tk.Label(header,image=wizard,bg=BG,bd=0).pack(side='left',padx=(16,0))
-    ttk.Button(header,text='Settings',command=open_settings).pack(side='right',padx=(20,0))
-    app.status_label=label(header,'●  DISARMED',MUTED,('Segoe UI',10,'bold'))
-    app.status_label.pack(side='right')
+    from workflow_header import WorkflowHeader
+    app.workflow=WorkflowHeader(header); app.workflow.pack(side='right',fill='both',expand=True,padx=(30,0))
+    app.status_label=app.workflow.status
     body=tk.Frame(root,bg=BG,padx=24,pady=10); body.pack(fill='both',expand=True)
     body.columnconfigure(0,weight=0,minsize=290); body.columnconfigure(1,weight=1)
     body.rowconfigure(0,weight=1)
     left=tk.Frame(body,bg=PANEL,highlightbackground=EDGE,highlightthickness=1,padx=20,pady=22)
     left.grid(row=0,column=0,sticky='nsew',padx=(0,16))
+    settings_dock=tk.Frame(left,bg=PANEL); settings_dock.pack(side='bottom',fill='x',pady=(20,0))
+    ttk.Button(settings_dock,text='Settings',command=open_settings).pack(anchor='center')
     label(left,'SESSION',GOLD,('Segoe UI',9,'bold')).pack(anchor='w')
     app.phase_label=label(left,'Starting OBS',TEXT,('Segoe UI',15,'bold'),wraplength=250,justify='left')
     app.phase_label.pack(anchor='w',pady=(10,8))
@@ -133,7 +135,7 @@ def build_ui(app):
     app.heartbeat_label.pack(anchor='w',pady=(0,14))
     app.start_button=ttk.Button(left,text='Automatic clips',style='Primary.TButton',command=app.toggle_monitoring)
     app.start_button.pack(fill='x')
-    app.save_button=ttk.Button(left,text='Save clip now',command=app.manual_save)
+    app.save_button=ttk.Button(left,text='Manually Save Clip',command=app.manual_save)
     app.save_button.pack(fill='x',pady=(8,0))
     tk.Frame(left,bg=EDGE,height=1).pack(fill='x',pady=16)
     label(left,'CAPTURE',GOLD,('Segoe UI',9,'bold')).pack(anchor='w')
@@ -159,3 +161,4 @@ def build_ui(app):
     footer=tk.Frame(root,bg=BG,padx=24,pady=10); footer.pack(fill='x')
     label(footer,'Automatic combat highlights',MUTED,('Segoe UI',9)).pack(side='left')
     label(footer,'1080p  •  OBS replay buffer',MUTED,('Segoe UI',9)).pack(side='right')
+
