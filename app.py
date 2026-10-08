@@ -147,7 +147,7 @@ class App:
         args=(self.source.get(),self.password.get(),self.name.get(),delay,self.tesseract.get(),timeout,method,monitor)
         self.auto_started=True; self.stop.clear(); self.manual.clear(); self.worker=threading.Thread(target=self.run,args=args,daemon=True); self.worker.start()
     def run(self,source,password,name,delay,executable,timeout,method='obs',monitor=1):
-        obs=None; capture=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; gate=GameGate(missing_seconds=timeout); reader=ScreenReader()
+        obs=None; capture=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; was_lobby=False; gate=GameGate(missing_seconds=timeout); reader=ScreenReader()
         try:
             obs=OBS(password)
             if not obs.request('GetReplayBufferStatus')['outputActive']:
@@ -169,7 +169,11 @@ class App:
                 # Run feed OCR alongside the HUD checks, then gate events.
                 hud_name,health,spectator,feed_text=reader.read(image,executable,gate.armed,need_name=not bool(detector.name))
                 was_armed=gate.armed
-                armed,changed,reason=gate.update(hud_name,health,spectator,time.monotonic())
+                armed,changed,reason=gate.update(hud_name,health,spectator,time.monotonic(),lobby=reader.lobby)
+                if gate.in_lobby and not was_lobby:
+                    detector=Detector(name); last_name=''
+                    self.say('Lobby confirmed: spectator lock and character state reset. Waiting for your next match.')
+                was_lobby=gate.in_lobby
                 self.game_armed=armed
                 if changed: self.say(('Automatically armed: ' if armed else 'Automatically disarmed: ')+reason)
                 if armed and not was_armed:
@@ -181,7 +185,7 @@ class App:
                 if armed and detector.name and detector.name!=last_name:
                     self.say('Active character: '+detector.name); last_name=detector.name
                 events=[]
-                if armed or (was_armed and spectator):
+                if not reader.lobby and (armed or (was_armed and spectator)):
                     if not was_armed: feed_text=ocr(crop(image,FEED),executable)
                     events=detector.process(feed_text,time.monotonic())
                     if spectator:

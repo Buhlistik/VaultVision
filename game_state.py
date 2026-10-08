@@ -5,6 +5,20 @@ from difflib import SequenceMatcher
 
 SPECTATOR=(.85,.575,1,.715)
 DEATH_MENU=(.35,.16,.66,.39)
+LOBBY_BADGE=(32/1920,12/1080,105/1920,79/1080)
+LOBBY_NAV=(140/1920,15/1080,940/1920,65/1080)
+
+def lobby_badge_candidate(image):
+    badge=crop(image,LOBBY_BADGE).convert('RGB')
+    pixels=list(badge.getdata())
+    gold=sum(r>90 and g>60 and r>g*1.1 and g>b*1.3 for r,g,b in pixels)
+    return bool(pixels) and gold/len(pixels)>.45
+
+def lobby_present(image,executable):
+    if not lobby_badge_candidate(image): return False
+    text=re.sub(r'[^a-z]','',ocr(crop(image,LOBBY_NAV),executable,6).lower())
+    return sum(word in text for word in ('season','religion','skills','stash'))>=3
+
 HEALTH=(780/1920,1020/1080,1140/1920,1043/1080)
 def read_name(image,executable):
     text=ocr(crop(image,NAME),executable,7)
@@ -65,9 +79,18 @@ class GameGate:
     def __init__(self,missing_seconds=5):
         self.armed=False; self.hits=0; self.candidate=''; self.missing_since=None
         self.missing_seconds=missing_seconds; self.spectating=False
-    def update(self,name,health,spectator,now):
+        self.lobby_hits=0; self.in_lobby=False
+    def update(self,name,health,spectator,now,lobby=False):
         previous=self.armed; reason=''
-        if spectator:
+        self.lobby_hits=self.lobby_hits+1 if lobby else 0
+        self.in_lobby=self.lobby_hits>=2
+        if lobby:
+            # Suppress events immediately; two confirmations release the
+            # spectator latch without shortening the floor-transition timeout.
+            self.armed=False; self.hits=0; self.candidate=''; self.missing_since=None
+            if self.in_lobby: self.spectating=False
+            reason='lobby detected'
+        elif spectator:
             self.spectating=True
             self.armed=False; self.hits=0; self.candidate=''; self.missing_since=None
             reason='spectator controls'
