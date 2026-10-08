@@ -172,4 +172,13 @@ class App:
             messagebox.showerror('OBS shutdown',self.close_error,parent=self.root)
         self.root.destroy()
 if __name__=='__main__':
-    root=tk.Tk(); App(root); root.mainloop()
+    import faulthandler,traceback
+    diagnostic_path=password_path().parent/'crash.log'
+    diagnostic_path.parent.mkdir(parents=True,exist_ok=True)
+    diagnostic_file=diagnostic_path.open('a',encoding='utf-8',buffering=1)
+    faulthandler.enable(file=diagnostic_file,all_threads=True)
+    root=tk.Tk()
+    def callback_error(kind,value,tb):
+        traceback.print_exception(kind,value,tb,file=diagnostic_file)
+    root.report_callback_exception=callback_error
+    App(root); root.mainloop()
