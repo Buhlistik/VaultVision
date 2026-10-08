@@ -13,7 +13,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt pyinstaller
       - run: python -m unittest discover -v
-      - run: pyinstaller --noconfirm --onedir --windowed --name VaultVision app.py
+      - run: pyinstaller --noconfirm --onedir --windowed --collect-all ffpyplayer --name VaultVision app.py
       - uses: actions/upload-artifact@v4
         with:
           name: VaultVision-Windows-prototype
