@@ -1,11 +1,10 @@
 """Ten isolated killfeed rows with semantic identities independent of row position."""
-import hashlib,re
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
-from difflib import SequenceMatcher
 from detector import crop,ocr,parse_feed,normalized,same_ocr_name
 
 def row_box(row):
-    return (.70,(20+20*row)/1080,1,(40+20*row)/1080)
+    return (.68,(20+20*row)/1080,1,(40+20*row)/1080)
 
 def event_key(event):
     tokens=event['killer'].split()
@@ -57,8 +56,9 @@ class RowTracker:
                 if candidates: previous=candidates[0]
             if previous:
                 track=previous; used.add(track['id'])
-                # Preserve a previously clean read instead of replacing it
-                # with a one-character OCR mutation after a row shift.
+                # Retry attribution text so an initially misread killer can
+                # recover. Keep the victim and weapon stable as rows move.
+                track['event']['killer']=event['killer']
             else:
                 self.next_id+=1
                 track={'id':self.next_id,'event':event}
@@ -94,3 +94,4 @@ class RowFeedReader:
         return self.tracker.update(results)
     def close(self):
         self.pool.shutdown(wait=True,cancel_futures=True)
+

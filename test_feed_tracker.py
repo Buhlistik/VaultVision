@@ -1,13 +1,33 @@
 import unittest
 from unittest.mock import patch
 from PIL import Image
-from feed_tracker import RowTracker,RowFeedReader
+from feed_tracker import RowTracker,RowFeedReader,row_box
 from detector import Detector
 
 def entry(number,killer='Other'):
     return f'{killer} killed Victim{number:02d} [Sword]'
 
 class RowTests(unittest.TestCase):
+    def test_killer_recovers_without_mutating_victim_or_duplicating(self):
+        tracker=RowTracker(); detector=Detector('QuarterstaffBALANCED')
+        text=tracker.update({9:'QuarterstaffBAVANCED killed chomperspysombraskye [Quarterstaff]'})
+        identity=tracker.rows[9]['id']
+        self.assertEqual(detector.process(text,0),[])
+        text=tracker.update({9:'QuarterstaffBALANCED killed chomperspysombraskye [Quarterstaff]'})
+        self.assertEqual(len(detector.process(text,1)),1)
+        text=tracker.update({8:'QuarterstaffBALANCED killed chomperspysombraskyE [Quarterstaff]'})
+        self.assertEqual(tracker.rows[8]['id'],identity)
+        self.assertIn('chomperspysombraskye',text)
+        self.assertEqual(detector.process(text,2),[])
+    def test_portal_announcements_preserve_physical_row_alignment(self):
+        tracker=RowTracker()
+        tracker.update({6:entry(1),7:'A blue portal has appeared',8:entry(2),9:entry(3)})
+        identity=tracker.rows[8]['id']
+        tracker.update({4:entry(1),5:'A blue portal has appeared',6:entry(2),7:entry(3),8:entry(4),9:entry(5)})
+        self.assertEqual(tracker.last_shift,2)
+        self.assertEqual(tracker.rows[6]['id'],identity)
+    def test_long_entries_keep_left_edge_of_killer(self):
+        self.assertLessEqual(row_box(9)[0]*1920,1339)
     def test_partial_feed_appends_without_moving_existing_entries(self):
         tracker=RowTracker()
         tracker.update({0:entry(0),1:entry(1)})
@@ -61,3 +81,4 @@ class RowTests(unittest.TestCase):
                 image.putpixel((1500,145),(255,255,255))
                 reader.read(image,'unused'); self.assertEqual(recognize.call_count,11)
         finally: reader.close()
+
