@@ -5,6 +5,7 @@ from PIL import Image
 from detector import Detector,crop,ocr,FEED,NAME
 from obs_client import OBS
 from capture import Capture
+from obs_startup import wait_for_replay
 from screen_reader import ScreenReader,replay_description
 from game_state import GameGate,read_name,spectator_present,health_present,SPECTATOR,recover_death
 from local_settings import load_password,save_password,password_path,load_settings,save_settings
@@ -44,7 +45,8 @@ class App:
         from pathlib import Path
         try:
             launched=launch_obs()
-            self.say('Starting OBS with replay buffer, minimized to tray.' if launched else 'OBS is already running; reusing it.')
+            self.say('Starting OBS with replay buffer, minimized to tray. Waiting 8 seconds for startup…' if launched else 'OBS is already running; checking replay buffer readiness.')
+            if launched and self.shutdown.wait(8): return
         except Exception as exc:
             self.say('Could not launch OBS: '+str(exc))
         last_path=''; last_error=''; connection=None
@@ -52,8 +54,9 @@ class App:
             try:
                 if connection is None:
                     connection=OBS(self.obs_password)
-                    if not self.shutdown.is_set() and not connection.request('GetReplayBufferStatus')['outputActive']:
-                        connection.request('StartReplayBuffer')
+                    self.say('Waiting for OBS replay buffer to become active…')
+                    if not wait_for_replay(connection,self.shutdown):
+                        connection.close(); connection=None; break
                     try:
                         seconds=replay_description(connection)
                         self.say(f'OBS replay duration: {seconds} seconds.')
@@ -67,7 +70,7 @@ class App:
                     path=connection.request('GetLastReplayBufferReplay').get('savedReplayPath','')
                 except RuntimeError as exc:
                     # OBS has no last replay until the first completed save.
-                    if 'No replay' in str(exc) or 'not saved' in str(exc).lower() or 'no saved' in str(exc).lower():
+                    if (not last_path and str(exc)=='GetLastReplayBufferReplay failed') or 'No replay' in str(exc) or 'not saved' in str(exc).lower() or 'no saved' in str(exc).lower():
                         path=''
                     else: raise
                 if path and path!=last_path and Path(path).is_file():
@@ -75,6 +78,7 @@ class App:
                     if not self.clip_labels.empty(): label=self.clip_labels.get()
                     self.saved_clips.put((path,label)); last_path=path
             except Exception as exc:
+                self.obs_ready=False
                 if connection:
                     connection.close(); connection=None
                 text=str(exc)
@@ -115,11 +119,13 @@ class App:
         if self.obs_ready and not self.auto_started and not getattr(self,'closing',False):
             self.auto_started=True; self.start()
         running=bool(self.worker and self.worker.is_alive())
-        self.start_button.configure(state='disabled' if running else 'normal')
+        self.start_button.configure(state='disabled' if running or not self.obs_ready else 'normal')
         self.status_label.configure(text='●  ARMED' if self.game_armed and running else '●  AUTO WATCH' if running else '●  DISARMED',fg='#c7a96b' if running else '#aca79b')
         for entry in self.entries: entry.configure(state='disabled' if running else 'normal')
         self.root.after(100,self.poll)
     def start(self):
+        if not self.obs_ready:
+            self.say('Waiting for OBS startup and replay buffer readiness.'); return
         if self.worker and self.worker.is_alive(): return
         try:
             delay=float(self.after.get())
@@ -142,7 +148,8 @@ class App:
         obs=None; capture=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; gate=GameGate(missing_seconds=timeout); reader=ScreenReader()
         try:
             obs=OBS(password)
-            if not obs.request('GetReplayBufferStatus')['outputActive']: obs.request('StartReplayBuffer')
+            if not obs.request('GetReplayBufferStatus')['outputActive']:
+                raise RuntimeError('OBS replay buffer is not active yet. Wait for OBS readiness before starting detection.')
             capture=Capture(obs,source,method,monitor,self.say)
             capture.grab()
             self.say(f'Automatic monitoring started. Save delay: {delay:.1f}s. Waiting for your gameplay HUD.')
