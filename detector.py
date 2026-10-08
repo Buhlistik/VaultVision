@@ -5,7 +5,7 @@ from PIL import Image, ImageOps
 
 # Ten feed rows extend to about y=220 at 1080p; include a margin.
 FEED = (.68, 0, 1, .23)
-NAME = (.40, .9, .60, .93)
+NAME = (.40, 982/1080, .60, 1001/1080)
 def crop(image, box):
     w,h=image.size
     return image.crop(tuple(round(v*(w if i%2==0 else h)) for i,v in enumerate(box)))

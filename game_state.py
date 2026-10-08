@@ -5,11 +5,15 @@ from difflib import SequenceMatcher
 
 SPECTATOR=(.85,.575,1,.715)
 DEATH_MENU=(.35,.16,.66,.39)
-HEALTH=(.405,.939,.595,.975)
+HEALTH=(780/1920,1020/1080,1140/1920,1043/1080)
 def read_name(image,executable):
     text=ocr(crop(image,NAME),executable,7)
-    # A single HUD-sized token; reject sentences/background OCR.
-    return text if re.fullmatch(r'[A-Za-z0-9_]{3,32}',text) else ''
+    # The narrow text band can still include a fragment of a nearby key icon.
+    # Ignore short icon tokens; OCR can insert a space within a long username.
+    tokens=re.findall(r'[A-Za-z0-9_]+',text)
+    names=[token for token in tokens if 3<=len(token)<=32]
+    name=''.join(names)
+    return name if 3<=len(name)<=32 else ''
 def spectator_present(text):
     text=re.sub(r'[^a-z]','',text.lower())
     phrases=('watchdeathcam','changeview','reportplayer','changetarget','thirdpersoncam')
@@ -37,14 +41,24 @@ def recover_death(image,executable,identity,now):
     return None
 def health_present(image):
     bar=crop(image,HEALTH).convert('RGB')
-    pixels=list(bar.getdata())
-    # Health fill or a long neutral metallic border (including an empty bar).
-    red=sum(r>65 and r>g*1.6 and r>b*1.5 for r,g,b in pixels)
-    if red>len(pixels)*.02: return True
+    # A health fill is a contiguous horizontal red strip, not scattered warm
+    # scenery or a gray border. Require aligned runs across multiple rows.
+    minimum=max(8,round(bar.width*.10))
+    previous=None; consecutive=0
     for y in range(bar.height):
-        row=[bar.getpixel((x,y)) for x in range(bar.width)]
-        neutral=sum(min(p)>65 and max(p)-min(p)<35 for p in row)
-        if neutral>bar.width*.65: return True
+        run=0; best=0; end=0
+        for x in range(bar.width):
+            r,g,b=bar.getpixel((x,y))
+            run=run+1 if r>65 and r>g*2 and r>b*2 else 0
+            if run>best: best=run; end=x
+        interval=(end-best+1,end)
+        if best>=minimum:
+            overlap=previous is not None and min(interval[1],previous[1])-max(interval[0],previous[0])+1>=minimum
+            consecutive=consecutive+1 if overlap else 1
+            if consecutive>=max(3,round(bar.height*.20)): return True
+            previous=interval
+        else:
+            previous=None; consecutive=0
     return False
 
 class GameGate:
