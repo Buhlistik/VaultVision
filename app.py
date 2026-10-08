@@ -13,18 +13,8 @@ class App:
         self.source=tk.StringVar(value='Dark and Darker'); self.password=tk.StringVar(); self.name=tk.StringVar(); self.after=tk.StringVar(value='0'); self.tesseract=tk.StringVar(value=r'C:\Program Files\Tesseract-OCR\tesseract.exe')
         try: self.password.set(load_password())
         except (OSError,UnicodeError): self.messages.put('Could not load the local password file; enter the password manually.')
-        frame=ttk.Frame(root,padding=18); frame.pack(fill='both',expand=True)
-        for row,(label,var) in enumerate([('OBS source name',self.source),('OBS WebSocket password',self.password),('Character name (blank = automatic)',self.name),('Save delay after detection (seconds)',self.after),('Tesseract executable',self.tesseract)]):
-            ttk.Label(frame,text=label).grid(row=row,column=0,sticky='w',pady=5)
-            ttk.Entry(frame,textvariable=var,width=48,show='*' if var is self.password else '').grid(row=row,column=1)
-        buttons=ttk.Frame(frame); buttons.grid(row=5,columnspan=2,pady=12)
-        self.start_button=ttk.Button(buttons,text='Arm session',command=self.start); self.start_button.pack(side='left')
-        ttk.Button(buttons,text='Disarm',command=self.stop.set).pack(side='left',padx=8)
-        ttk.Button(buttons,text='Save replay now',command=self.manual.set).pack(side='left')
-        ttk.Button(buttons,text='Save password',command=self.store_password).pack(side='left',padx=8)
-        ttk.Button(buttons,text='Open password file',command=self.open_password_file).pack(side='left')
-        ttk.Label(frame,text='Arm for your match. Disarm before spectating or switching characters.\nOBS replay length controls clip length; use 60 seconds initially.').grid(row=6,columnspan=2)
-        self.log=tk.Text(frame,width=85,height=14,state='disabled'); self.log.grid(row=7,columnspan=2,pady=12)
+        from ui_theme import build_ui
+        build_ui(self)
         root.protocol('WM_DELETE_WINDOW',self.close); root.after(100,self.poll)
     def store_password(self):
         try:
@@ -39,8 +29,15 @@ class App:
     def say(self,text): self.messages.put(time.strftime('%H:%M:%S')+' '+text)
     def poll(self):
         while not self.messages.empty():
-            self.log.configure(state='normal'); self.log.insert('end',self.messages.get()+'\n'); self.log.see('end'); self.log.configure(state='disabled')
-        self.start_button.configure(state='disabled' if self.worker and self.worker.is_alive() else 'normal')
+            self.log.configure(state='normal'); text=self.messages.get()
+            tag='error' if 'Stopped:' in text or 'Could not' in text else 'kill' if 'KILL:' in text or 'DEATH:' in text else ''
+            self.log.insert('end',text+'\n',tag)
+            if 'Active character: ' in text: self.character_label.configure(text='Character: '+text.split('Active character: ',1)[1])
+            self.log.configure(state='normal'); self.log.see('end'); self.log.configure(state='disabled')
+        running=bool(self.worker and self.worker.is_alive())
+        self.start_button.configure(state='disabled' if running else 'normal')
+        self.status_label.configure(text='●  MONITORING' if running else '●  DISARMED',fg='#c7a96b' if running else '#aca79b')
+        for entry in self.entries: entry.configure(state='disabled' if running else 'normal')
         self.root.after(100,self.poll)
     def start(self):
         if self.worker and self.worker.is_alive(): return
