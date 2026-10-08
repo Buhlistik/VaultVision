@@ -92,6 +92,7 @@ class WindowsUITests(unittest.TestCase):
                 app=App(root)
                 try:
                     app.poll(); root.update_idletasks()
+                    self.assertEqual(set(app.artwork),{'jokester.png','dark-and-darker-logo.png','wizard.png'})
                     self.assertFalse(hasattr(app,'log'))
                     self.assertFalse(hasattr(app,'hud_timeout'))
                     self.assertFalse(hasattr(app,'name'))

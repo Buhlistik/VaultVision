@@ -1,7 +1,9 @@
-"""Dark fantasy desktop styling, with no image assets or animation overhead."""
+"""Charcoal and gold interface with supplied game artwork."""
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
+import sys
+from PIL import Image,ImageTk
 
 BG='#0d0f12'
 PANEL='#171a1f'
@@ -15,6 +17,24 @@ def build_ui(app):
     root.title('VaultVision • Dark and Darker')
     root.geometry('1480x850'); root.minsize(1120,760)
     root.configure(bg=BG)
+    app.artwork={}
+    asset_dir=Path(__file__).resolve().parent/'assets'
+    def artwork(name,size):
+        try:
+            with Image.open(asset_dir/name) as source:
+                image=source.convert('RGBA')
+                image.thumbnail(size,Image.Resampling.LANCZOS)
+            photo=ImageTk.PhotoImage(image,master=root)
+            app.artwork[name]=photo
+            return photo
+        except (OSError,ValueError) as exc:
+            app.say('Could not load interface artwork '+name+': '+str(exc))
+            return None
+    icon=artwork('jokester.png',(256,256))
+    if icon is not None: root.iconphoto(True,icon)
+    if sys.platform=='win32' and (asset_dir/'jokester.ico').is_file():
+        try: root.iconbitmap(str(asset_dir/'jokester.ico'))
+        except tk.TclError: pass
     style=ttk.Style(root); style.theme_use('clam')
     style.configure('.',font=('Segoe UI',10),background=PANEL,foreground=TEXT)
     style.configure('TFrame',background=BG)
@@ -69,8 +89,12 @@ def build_ui(app):
     def open_settings():
         settings_window.deiconify(); settings_window.lift(); settings_window.focus_set()
     header=tk.Frame(root,bg=BG,padx=24,pady=18); header.pack(fill='x')
+    logo=artwork('dark-and-darker-logo.png',(128,72))
+    if logo is not None:
+        tk.Label(header,image=logo,bg=BG,bd=0).pack(side='left',padx=(0,20))
+        tk.Frame(header,bg=EDGE,width=1,height=48).pack(side='left',padx=(0,20))
     brand=tk.Frame(header,bg=BG); brand.pack(side='left')
-    label(brand,'VaultVision',GOLD,('Georgia',24,'bold')).pack(anchor='w')
+    label(brand,'VAULTVISION',GOLD,('Palatino Linotype',25,'bold')).pack(anchor='w')
     label(brand,'DARK AND DARKER  •  COMBAT HIGHLIGHTS',MUTED,('Segoe UI',9)).pack(anchor='w',pady=(4,0))
     ttk.Button(header,text='Settings',command=open_settings).pack(side='right',padx=(20,0))
     app.status_label=label(header,'●  DISARMED',MUTED,('Segoe UI',10,'bold'))
@@ -113,6 +137,10 @@ def build_ui(app):
     clips=tk.Frame(main,bg=PANEL,highlightbackground=EDGE,highlightthickness=1)
     clips.grid(row=0,column=0,sticky='nsew')
     app.gallery=ClipGallery(clips,app.say)
+    wizard=artwork('wizard.png',(200,200))
+    if wizard is not None:
+        app.gallery.empty_art=wizard
+        app.gallery.screen.configure(image=wizard,compound='top',text='Your next highlight belongs here\nSelect a replay below, or import a video.',font=('Segoe UI',11))
     app.saved_label=label(main,'No clips saved this session',MUTED,('Segoe UI',9),anchor='w',wraplength=650)
     app.saved_label.grid(row=1,column=0,sticky='ew',pady=(10,0))
     footer=tk.Frame(root,bg=BG,padx=24,pady=10); footer.pack(fill='x')
