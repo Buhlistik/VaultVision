@@ -5,3 +5,5 @@ dist/
 *.spec
 *.mp4
 .env
+
+obs-websocket-password.txt
