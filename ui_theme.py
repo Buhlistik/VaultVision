@@ -1,6 +1,7 @@
 """Dark fantasy desktop styling, with no image assets or animation overhead."""
 import tkinter as tk
 from tkinter import ttk
+from pathlib import Path
 
 BG='#0d0f12'
 PANEL='#171a1f'
@@ -38,7 +39,7 @@ def build_ui(app):
     settings_window=tk.Toplevel(root)
     settings_window.title('VaultVision — Settings')
     settings_window.configure(bg=BG)
-    settings_window.geometry('680x640'); settings_window.minsize(640,600)
+    settings_window.geometry('680x540'); settings_window.minsize(640,520)
     settings_window.withdraw(); settings_window.transient(root)
     settings_window.protocol('WM_DELETE_WINDOW',settings_window.withdraw)
     settings_window.bind('<Escape>',lambda event:settings_window.withdraw())
@@ -50,12 +51,16 @@ def build_ui(app):
     app.entries=[]
     fields=[('Capture method (screen / obs)',app.capture_method),('Screen monitor',app.monitor),
             ('OBS source',app.source),('WebSocket password',app.password),
-            ('Character override',app.name),('Save delay (seconds)',app.after),
-            ('HUD absence timeout (seconds)',app.hud_timeout),('Tesseract executable',app.tesseract)]
+            ('Save delay (seconds)',app.after)]
     for row,(title,var) in enumerate(fields,2):
         label(settings,title,MUTED).grid(row=row,column=0,sticky='w',padx=(0,16),pady=7)
         entry=ttk.Entry(settings,textvariable=var,show='●' if var is app.password else '')
         entry.grid(row=row,column=1,sticky='ew',pady=7); app.entries.append(entry)
+    app.ocr_label=label(settings,'OCR: ready' if Path(app.tesseract.get()).is_file() else 'OCR: setup needed',MUTED)
+    app.ocr_label.grid(row=7,column=0,sticky='w',pady=(12,0))
+    app.ocr_button=ttk.Button(settings,text='Choose OCR executable…',command=app.choose_ocr)
+    app.ocr_button.grid(row=7,column=1,sticky='e',pady=(12,0))
+    ttk.Button(settings,text='Open activity log',command=app.open_activity_log).grid(row=8,columnspan=2,sticky='w',pady=(16,0))
     actions=tk.Frame(settings,bg=PANEL)
     actions.grid(row=10,columnspan=2,sticky='w',pady=(18,0))
     ttk.Button(actions,text='Save password',command=app.store_password).pack(side='left',padx=(0,8))
@@ -76,14 +81,18 @@ def build_ui(app):
     left=tk.Frame(body,bg=PANEL,highlightbackground=EDGE,highlightthickness=1,padx=20,pady=22)
     left.grid(row=0,column=0,sticky='nsew',padx=(0,16))
     label(left,'SESSION',GOLD,('Segoe UI',9,'bold')).pack(anchor='w')
-    label(left,'Ready for the dungeon',TEXT,('Segoe UI',16,'bold')).pack(anchor='w',pady=(10,8))
-    label(left,'Detects kills automatically.\nPauses in the lobby or while spectating.',MUTED,justify='left').pack(anchor='w',pady=(0,16))
+    app.phase_label=label(left,'Starting OBS',TEXT,('Segoe UI',15,'bold'),wraplength=250,justify='left')
+    app.phase_label.pack(anchor='w',pady=(10,8))
+    app.detail_label=label(left,'Preparing automatic highlights…',MUTED,wraplength=250,justify='left')
+    app.detail_label.pack(anchor='w',pady=(0,14))
     app.character_label=label(left,'Character: automatic',TEXT,wraplength=250,justify='left')
     app.character_label.pack(anchor='w',pady=(0,20))
-    app.start_button=ttk.Button(left,text='Start monitoring',style='Primary.TButton',command=app.start)
+    app.heartbeat_label=label(left,'',MUTED,('Segoe UI',9),wraplength=250,justify='left')
+    app.heartbeat_label.pack(anchor='w',pady=(0,14))
+    app.start_button=ttk.Button(left,text='Automatic clips',style='Primary.TButton',command=app.toggle_monitoring)
     app.start_button.pack(fill='x')
-    ttk.Button(left,text='Pause monitoring',command=app.stop.set).pack(fill='x',pady=8)
-    ttk.Button(left,text='Save replay now',command=app.manual.set).pack(fill='x')
+    app.save_button=ttk.Button(left,text='Save clip now',command=app.manual_save)
+    app.save_button.pack(fill='x',pady=(8,0))
     tk.Frame(left,bg=EDGE,height=1).pack(fill='x',pady=16)
     label(left,'CAPTURE',GOLD,('Segoe UI',9,'bold')).pack(anchor='w')
     ttk.Checkbutton(left,text='Include deaths',variable=app.capture_deaths).pack(anchor='w',pady=(12,8))
@@ -104,25 +113,8 @@ def build_ui(app):
     clips=tk.Frame(main,bg=PANEL,highlightbackground=EDGE,highlightthickness=1)
     clips.grid(row=0,column=0,sticky='nsew')
     app.gallery=ClipGallery(clips,app.say)
-    activity=tk.Frame(main,bg=PANEL,highlightbackground=EDGE,highlightthickness=1,padx=16,pady=12)
-    activity.grid(row=1,column=0,sticky='ew',pady=(12,0))
-    log_header=tk.Frame(activity,bg=PANEL); log_header.pack(fill='x')
-    label(log_header,'ACTIVITY',MUTED,('Segoe UI',9,'bold')).pack(side='left')
-    logs=tk.Frame(activity,bg=PANEL); logs.pack(fill='x',pady=(8,0))
-    app.log=tk.Text(logs,height=5,width=48,state='disabled',bg='#101216',fg=TEXT,
-                    font=('Consolas',9),relief='flat',borderwidth=0,padx=10,pady=8,
-                    selectbackground='#4c4030',wrap='word')
-    scroll=ttk.Scrollbar(logs,command=app.log.yview); app.log.configure(yscrollcommand=scroll.set)
-    scroll.pack(side='right',fill='y'); app.log.pack(side='left',fill='x',expand=True)
-    app.log.tag_configure('kill',foreground='#d7be7d'); app.log.tag_configure('error',foreground='#ed9382')
-    def toggle_log():
-        if logs.winfo_manager():
-            logs.pack_forget(); log_toggle.configure(text='Show')
-        else:
-            logs.pack(fill='x',pady=(8,0)); log_toggle.configure(text='Hide')
-    log_toggle=tk.Button(log_header,text='Hide',command=toggle_log,bg=PANEL,fg=MUTED,
-                         activebackground=PANEL,activeforeground=GOLD,bd=0,cursor='hand2')
-    log_toggle.pack(side='right')
+    app.saved_label=label(main,'No clips saved this session',MUTED,('Segoe UI',9),anchor='w',wraplength=650)
+    app.saved_label.grid(row=1,column=0,sticky='ew',pady=(10,0))
     footer=tk.Frame(root,bg=BG,padx=24,pady=10); footer.pack(fill='x')
     label(footer,'Automatic combat highlights',MUTED,('Segoe UI',9)).pack(side='left')
     label(footer,'1080p  •  OBS replay buffer',MUTED,('Segoe UI',9)).pack(side='right')

@@ -98,13 +98,13 @@ class GameGate:
             self.armed=False; self.hits=0; self.candidate=''
             if not name and not health:
                 if self.missing_since is None: self.missing_since=now
-                if now-self.missing_since>=self.missing_seconds:
+                if self.missing_seconds is not None and now-self.missing_since>=self.missing_seconds:
                     self.spectating=False; self.missing_since=None
             else: self.missing_since=None
         elif not name and not health:
             self.hits=0; self.candidate=''
             if self.missing_since is None: self.missing_since=now
-            if now-self.missing_since>=self.missing_seconds:
+            if self.missing_seconds is not None and now-self.missing_since>=self.missing_seconds:
                 self.armed=False; reason=f'name and health bar absent for {self.missing_seconds:g} seconds'
         else:
             self.missing_since=None

@@ -3,7 +3,7 @@ import json,os,queue,math
 from collections import OrderedDict
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk,filedialog
+from tkinter import ttk,filedialog,simpledialog,messagebox
 from PIL import ImageTk
 from local_settings import password_path
 from preview_engine import PreviewEngine
@@ -15,7 +15,7 @@ def clock(seconds):
 class ClipGallery:
     def __init__(self,parent,say):
         self.say=say; self.path=None; self.photo=None; self.image=None
-        self.scrubbing=False
+        self.fullscreen_window=None; self.full_screen=None; self.full_timeline=None; self.full_photo=None
         self.duration=0; self.position=0; self.paused=True; self.muted=False; self.volume=tk.DoubleVar(value=.7)
         self.scrubbing=False; self.scrub_position=0.; self.token=0; self.cache=OrderedDict(); self.closing=False
         self.engine=PreviewEngine()
@@ -35,6 +35,7 @@ class ClipGallery:
         self.screen=tk.Label(self.viewport,text='Your next highlight belongs here\n\nSaved replays appear below. You can also import a video.',bg='#080a0d',fg=MUTED,font=('Segoe UI',12))
         self.screen.pack(fill='both',expand=True); self.screen.bind('<Configure>',self.resize)
         self.screen.bind('<Button-1>',lambda e:self.toggle())
+        self.screen.bind('<Double-Button-1>',lambda e:self.toggle_fullscreen())
         self.timeline=tk.Canvas(outer,height=20,bg=BG,highlightthickness=0,cursor='hand2')
         self.timeline.pack(fill='x',pady=(8,0)); self.timeline.bind('<Configure>',lambda e:self.draw_progress())
         self.timeline.bind('<Button-1>',self.scrub_at)
@@ -48,6 +49,7 @@ class ClipGallery:
             b.pack(side='left',padx=(0,6)); return b
         self.play=button('▶  Play',self.toggle); self.play.configure(state='disabled')
         button('↺',self.restart); self.mute_button=button('Mute',self.mute)
+        self.fullscreen_button=button('Fullscreen',self.toggle_fullscreen); self.fullscreen_button.configure(state='disabled')
         self.volume_slider=tk.Scale(bar,from_=0,to=1,resolution=.05,orient='horizontal',
                     variable=self.volume,command=self.change_volume,length=70,
                     showvalue=False,bg=BG,troughcolor='#34383f',highlightthickness=0,
@@ -60,6 +62,9 @@ class ClipGallery:
                   activebackground=BG,activeforeground=GOLD,bd=0,cursor='hand2').pack(side='right')
         tk.Button(tools,text='Open folder',command=self.open_folder,bg=BG,fg=MUTED,
                   activebackground=BG,activeforeground=GOLD,bd=0,cursor='hand2').pack(side='right',padx=10)
+        self.rename_button=tk.Button(tools,text='Rename',command=self.rename_clip,bg=BG,fg=INK,
+                  activebackground=BG,activeforeground=GOLD,bd=0,cursor='hand2',state='disabled')
+        self.rename_button.pack(side='right',padx=8)
         style=ttk.Style(parent)
         style.configure('Clips.Treeview',background='#13161b',fieldbackground='#13161b',foreground=INK,
                         rowheight=38,borderwidth=0,font=('Segoe UI',10))
@@ -85,18 +90,87 @@ class ClipGallery:
         self.list.delete(*self.list.get_children())
         for i,record in enumerate(self.records):
             label=record.get('label','Replay')
-            self.list.insert('', 'end',iid=str(i),text='  '+label+'  ·  '+Path(record['path']).stem,tags=('even' if i%2==0 else 'odd',))
+            self.list.insert('', 'end',iid=str(i),text='  '+label+'  ·  '+(record.get('title') or Path(record['path']).stem),tags=('even' if i%2==0 else 'odd',))
             if record['path']==self.path: self.list.selection_set(str(i))
         self.count.configure(text=f'{len(self.records)} clips')
     def add(self,path,label='Replay'):
         path=str(Path(path))
         if not Path(path).is_file() or any(r['path']==path for r in self.records): return
         self.records.insert(0,{'path':path,'label':label}); self.refresh()
+        self.persist_records()
+        self.say('Saved clip: '+Path(path).name)
+    def persist_records(self):
         try:
             self.index.parent.mkdir(parents=True,exist_ok=True)
-            temporary=self.index.with_suffix('.tmp'); temporary.write_text(json.dumps(self.records,indent=2),encoding='utf-8'); temporary.replace(self.index)
-        except OSError: self.say('Could not persist clip history.')
-        self.say('Saved clip: '+Path(path).name)
+            temporary=self.index.with_suffix('.tmp')
+            temporary.write_text(json.dumps(self.records,indent=2),encoding='utf-8')
+            temporary.replace(self.index)
+            return True
+        except OSError:
+            self.say('Could not persist clip history.'); return False
+    def set_clip_title(self,index,title):
+        title=title.strip()
+        if not title or len(title)>120 or any(ord(ch)<32 for ch in title):
+            raise ValueError('Use a name from 1 to 120 characters without line breaks.')
+        record=self.records[index]; previous=record.get('title')
+        record['title']=title
+        if not self.persist_records():
+            if previous is None: record.pop('title',None)
+            else: record['title']=previous
+            return False
+        self.refresh()
+        if record['path']==getattr(self,'path',None): self.title.configure(text=title)
+        return True
+    def rename_clip(self):
+        selected=self.list.selection()
+        if not selected: return
+        index=int(selected[0]); record=self.records[index]
+        title=simpledialog.askstring('Rename clip','Display name:',initialvalue=record.get('title') or Path(record['path']).stem,
+                                     parent=self.screen.winfo_toplevel())
+        if title is None: return
+        try:
+            if not self.set_clip_title(index,title):
+                messagebox.showerror('Rename clip','Could not save the new name.',parent=self.screen.winfo_toplevel())
+        except ValueError as exc:
+            messagebox.showerror('Rename clip',str(exc),parent=self.screen.winfo_toplevel())
+    def toggle_fullscreen(self):
+        if self.fullscreen_window is not None:
+            self.exit_fullscreen(); return
+        if not self.path: return
+        window=tk.Toplevel(self.screen); self.fullscreen_window=window
+        window.configure(bg='#080a0d'); window.attributes('-fullscreen',True)
+        window.protocol('WM_DELETE_WINDOW',self.exit_fullscreen)
+        window.bind('<Escape>',lambda event:self.exit_fullscreen())
+        window.bind('<space>',lambda event:self.toggle())
+        window.bind('<Left>',lambda event:self.skip(-5))
+        window.bind('<Right>',lambda event:self.skip(5))
+        controls=tk.Frame(window,bg=BG,padx=18,pady=10); controls.pack(side='bottom',fill='x')
+        self.full_play=tk.Button(controls,text='Play',command=self.toggle,bg='#252931',fg=INK,bd=0,padx=18,pady=8)
+        self.full_play.pack(side='left')
+        tk.Button(controls,text='Exit fullscreen · Esc',command=self.exit_fullscreen,bg=BG,fg=INK,bd=0,padx=18,pady=8).pack(side='right')
+        self.full_time=tk.Label(controls,text=clock(self.position)+' / '+clock(self.duration),bg=BG,fg=MUTED)
+        self.full_time.pack(side='right',padx=16)
+        self.full_timeline=tk.Canvas(window,height=24,bg=BG,highlightthickness=0,cursor='hand2')
+        self.full_timeline.pack(side='bottom',fill='x')
+        self.full_timeline.bind('<Configure>',lambda event:self.draw_progress())
+        self.full_timeline.bind('<Button-1>',self.scrub_at)
+        self.full_timeline.bind('<B1-Motion>',self.scrub_at)
+        self.full_timeline.bind('<ButtonRelease-1>',self.seek_at)
+        self.full_screen=tk.Label(window,bg='#080a0d',fg=MUTED,text='Loading preview…')
+        self.full_screen.pack(fill='both',expand=True)
+        self.full_screen.bind('<Configure>',self.resize)
+        self.full_screen.bind('<Button-1>',lambda event:self.toggle())
+        self.full_screen.bind('<Double-Button-1>',lambda event:self.exit_fullscreen())
+        window.focus_set(); self.render(); self.draw_progress()
+    def exit_fullscreen(self):
+        window=self.fullscreen_window
+        self.fullscreen_window=None; self.full_screen=None; self.full_timeline=None; self.full_photo=None
+        if window is not None: window.destroy()
+        if not self.closing: self.render()
+    def skip(self,seconds):
+        if self.path and self.duration:
+            self.position=max(0,min(self.duration,self.position+seconds))
+            self.engine.command('seek',self.position); self.draw_progress()
     def import_clips(self):
         for path in filedialog.askopenfilenames(filetypes=[('Video files','*.mp4 *.mkv *.mov *.flv *.ts'),('All files','*.*')]): self.add(path,'Imported')
     def select(self,event=None):
@@ -104,7 +178,8 @@ class ClipGallery:
         if not choice: return
         record=self.records[int(choice[0])]
         if record['path']==self.path: return
-        self.path=record['path']; self.title.configure(text=Path(self.path).name)
+        self.path=record['path']; self.title.configure(text=record.get('title') or Path(self.path).name)
+        self.rename_button.configure(state='normal'); self.fullscreen_button.configure(state='normal')
         self.duration=0; self.position=0; self.paused=True
         self.play.configure(text='▶  Play',state='disabled'); self.time.configure(text='Loading…')
         self.image=self.cache.get(self.path)
@@ -119,6 +194,7 @@ class ClipGallery:
                 if token!=self.token: continue
                 if kind=='error':
                     self.screen.configure(image='',text='Unable to preview this clip')
+                    if self.full_screen is not None: self.full_screen.configure(image='',text='Unable to preview this clip')
                     self.play.configure(state='disabled')
                     self.say('Preview error: '+data); continue
                 image,self.position,self.duration,self.paused=data
@@ -130,6 +206,9 @@ class ClipGallery:
                     self.render()
                 self.play.configure(text='▶  Play' if self.paused else 'Ⅱ  Pause',state='normal')
                 if not self.scrubbing: self.time.configure(text=clock(self.position)+' / '+clock(self.duration))
+                if self.fullscreen_window is not None:
+                    self.full_play.configure(text='Play' if self.paused else 'Pause')
+                    if not self.scrubbing: self.full_time.configure(text=clock(self.position)+' / '+clock(self.duration))
                 self.draw_progress()
         except queue.Empty: pass
         except Exception as exc:
@@ -137,27 +216,34 @@ class ClipGallery:
         self.job=self.screen.after(30,self.poll)
     def render(self):
         if self.image is None: return
+        # One image conversion per frame: fullscreen shares the existing decoder.
+        target=self.full_screen if self.full_screen is not None else self.screen
         image=self.image.copy()
-        image.thumbnail((max(1,self.screen.winfo_width()),max(1,self.screen.winfo_height())))
-        self.photo=ImageTk.PhotoImage(image); self.screen.configure(image=self.photo,text='')
+        image.thumbnail((max(1,target.winfo_width()),max(1,target.winfo_height())))
+        photo=ImageTk.PhotoImage(image)
+        if self.full_screen is not None: self.full_photo=photo
+        else: self.photo=photo
+        target.configure(image=photo,text='')
     def resize(self,event=None):
         if self.image is not None: self.render()
     def draw_progress(self):
-        canvas=self.timeline; canvas.delete('all'); width=max(1,canvas.winfo_width())
-        canvas.create_line(0,10,width,10,fill='#34383f',width=3)
-        x=width*min(1,(self.scrub_position if self.scrubbing else self.position)/self.duration) if self.duration else 0
-        canvas.create_line(0,10,x,10,fill=GOLD,width=3)
-        canvas.create_oval(x-4,6,x+4,14,fill=GOLD,outline='')
+        for canvas in (self.timeline,getattr(self,'full_timeline',None)):
+            if canvas is None: continue
+            canvas.delete('all'); width=max(1,canvas.winfo_width())
+            canvas.create_line(0,10,width,10,fill='#34383f',width=3)
+            x=width*min(1,(self.scrub_position if self.scrubbing else self.position)/self.duration) if self.duration else 0
+            canvas.create_line(0,10,x,10,fill=GOLD,width=3)
+            canvas.create_oval(x-4,6,x+4,14,fill=GOLD,outline='')
     def scrub_at(self,event):
         if not self.duration: return
         self.scrubbing=True
-        self.scrub_position=max(0,min(1,event.x/max(1,self.timeline.winfo_width())))*self.duration
+        self.scrub_position=max(0,min(1,event.x/max(1,getattr(event,'widget',self.timeline).winfo_width())))*self.duration
         self.time.configure(text=clock(self.scrub_position)+' / '+clock(self.duration))
         self.draw_progress()
     def seek_at(self,event):
         self.scrubbing=False
         if self.duration:
-            self.position=max(0,min(1,event.x/max(1,self.timeline.winfo_width())))*self.duration
+            self.position=max(0,min(1,event.x/max(1,getattr(event,'widget',self.timeline).winfo_width())))*self.duration
             self.draw_progress()
             self.engine.command('seek',self.position)
     def toggle(self):
@@ -173,5 +259,6 @@ class ClipGallery:
             except OSError: self.say('Could not open clip folder.')
     def close(self):
         self.closing=True
+        if self.fullscreen_window is not None: self.exit_fullscreen()
         if self.job: self.screen.after_cancel(self.job)
         self.engine.close()
