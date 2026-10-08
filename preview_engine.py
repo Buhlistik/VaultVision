@@ -25,7 +25,7 @@ class PreviewEngine:
         try: self.frames.put_nowait(value)
         except queue.Full: pass
     def _run(self):
-        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False; ready=False; position=0.; volume=.7; last_display=0.; seek_target=None
+        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False; ready=False; position=0.; volume=.7; last_display=0.; seek_target=None; display_width=640
         try:
             while not self.stop.is_set():
                 commands=[]
@@ -34,18 +34,27 @@ class PreviewEngine:
                     except queue.Empty: break
                 # Only the newest selection is worth opening.
                 opens=[i for i,c in enumerate(commands) if c[0]=='open']
-                if opens: commands=commands[opens[-1]:]
+                if opens:
+                    settings=[command for command in commands[:opens[-1]] if command[0] in ('size','volume','mute')]
+                    commands=settings+commands[opens[-1]:]
                 # Drop superseded seeks/settings before touching the decoder.
                 latest={}
                 for index,command in enumerate(commands):
                     kind=command[0]
-                    if kind in ('seek','restart','mute','volume'):
+                    if kind in ('seek','restart','mute','volume','size'):
                         latest['position' if kind in ('seek','restart') else kind]=index
                 commands=[command for index,command in enumerate(commands)
-                          if command[0] not in ('seek','restart','mute','volume') or
+                          if command[0] not in ('seek','restart','mute','volume','size') or
                           latest['position' if command[0] in ('seek','restart') else command[0]]==index]
                 for kind,generation,value in commands:
                     try:
+                        if kind=='size':
+                            display_width=max(320,min(3840,int(value)))
+                            if player:
+                                player.set_size(display_width,-1)
+                                if ready:
+                                    player.set_pause(False); first=True
+                            continue
                         if kind=='volume':
                             volume=max(0,min(1,float(value)))
                             if player and ready: player.set_volume(volume)
@@ -63,7 +72,7 @@ class PreviewEngine:
                                 from ffpyplayer.player import MediaPlayer
                                 factory=MediaPlayer
                             player=factory(value,ff_opts={'out_fmt':'rgb24','volume':volume})
-                            player.set_size(640,-1); player.set_mute(True)
+                            player.set_size(display_width,-1); player.set_mute(True)
                             first=True; paused=True; duration=0.; eof=False; ready=False; position=0.; seek_target=None
                         elif player and generation==token and ready:
                             if kind=='toggle':

@@ -101,6 +101,8 @@ class WindowsUITests(unittest.TestCase):
                     gallery.toggle_fullscreen(); root.update()
                     self.assertIs(gallery.engine,original)
                     self.assertIsNotNone(gallery.fullscreen_window)
+                    self.assertEqual(gallery.full_screen.winfo_width(),gallery.fullscreen_window.winfo_width())
+                    self.assertEqual(gallery.full_screen.winfo_height(),gallery.fullscreen_window.winfo_height())
                     gallery.exit_fullscreen(); root.update_idletasks()
                     self.assertIsNone(gallery.fullscreen_window)
                     self.assertEqual(callback_errors,[])
