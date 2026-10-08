@@ -72,7 +72,9 @@ def build_ui(app):
         entry=ttk.Entry(settings,textvariable=var,show='●' if var is app.password else '')
         entry.grid(row=row,column=1,sticky='ew',pady=6)
         app.entries.append(entry)
-    actions=tk.Frame(settings,bg=PANEL); actions.grid(row=len(fields)+1,columnspan=2,sticky='e',pady=(10,0))
+    ttk.Checkbutton(settings,text='Capture deaths',variable=app.capture_deaths).grid(
+        row=len(fields)+1,columnspan=2,sticky='w',pady=(8,0))
+    actions=tk.Frame(settings,bg=PANEL); actions.grid(row=len(fields)+2,columnspan=2,sticky='e',pady=(10,0))
     ttk.Button(actions,text='Save password',command=app.store_password).pack(side='left',padx=(0,8))
     ttk.Button(actions,text='Open password file',command=app.open_password_file).pack(side='left')
     activity=tk.Frame(right,bg=PANEL,highlightbackground=EDGE,highlightthickness=1,padx=20,pady=16)

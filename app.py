@@ -17,6 +17,10 @@ class App:
         self.hud_timeout=tk.StringVar(value='30')
         self.capture_method=tk.StringVar(value='obs'); self.monitor=tk.StringVar(value='1')
         self.settings=load_settings()
+        self.capture_deaths=tk.BooleanVar(value=self.settings.get('capture_deaths',False) is True)
+        self.deaths_enabled=threading.Event()
+        self.capture_deaths.trace_add('write',self.update_death_capture)
+        self.update_death_capture()
         for key,var in [('source',self.source),('character_override',self.name),('save_delay',self.after),('tesseract',self.tesseract),('hud_timeout',self.hud_timeout),('capture_method',self.capture_method),('monitor',self.monitor)]:
             value=self.settings.get(key)
             if isinstance(value,(str,int,float)): var.set(str(value))
@@ -31,6 +35,10 @@ class App:
         root.protocol('WM_DELETE_WINDOW',self.close); root.after(100,self.poll)
         self.obs_password=self.password.get()
         threading.Thread(target=self.watch_obs,daemon=True).start()
+    def update_death_capture(self,*args):
+        if self.capture_deaths.get(): self.deaths_enabled.set()
+        else: self.deaths_enabled.clear()
+
     def watch_obs(self):
         from obs_launcher import launch_obs
         from pathlib import Path
@@ -142,6 +150,8 @@ class App:
                 now=time.monotonic(); scan_started=now
                 if self.manual.is_set():
                     self.manual.clear(); self.request_save(obs,'Manual'); self.say('Manual replay save requested.')
+                if due is not None and due_label.startswith('Death:') and not self.deaths_enabled.is_set():
+                    due=None
                 if due is not None and now>=due:
                     self.request_save(obs,due_label); self.say('Event replay save requested; check the OBS output folder.'); due=None
                 image=capture.grab()
@@ -162,13 +172,15 @@ class App:
                     events=detector.process(feed_text,time.monotonic())
                     if spectator:
                         events=[event for event in events if event['kind']=='death']
-                        if not events and not detector.dead and detector.name:
+                        if self.deaths_enabled.is_set() and not events and not detector.dead and detector.name:
                             recovered=recover_death(image,executable,detector.name,time.monotonic())
                             detector.dead=True
                             events=[recovered or {'kind':'death','killer':'Unknown','victim':detector.name,'weapon':''}]
                     elif was_armed and detector.dead:
                         events=[event for event in events if event['kind']=='death']
                 else: feed_text=''
+                if not self.deaths_enabled.is_set():
+                    events=[event for event in events if event['kind']=='kill']
                 feed_done=time.monotonic()
                 for event in events:
                     self.say(f"{event['kind'].upper()}: {event['killer']} → {event['victim']} ({event['weapon']})")
@@ -196,7 +208,7 @@ class App:
             save_settings({'source':self.source.get(),'character_override':self.name.get(),
                            'save_delay':self.after.get(),'tesseract':self.tesseract.get(),
                            'hud_timeout':self.hud_timeout.get(),'capture_method':self.capture_method.get(),
-                           'monitor':self.monitor.get(),'window_geometry':self.root.geometry(),
+                           'monitor':self.monitor.get(),'capture_deaths':self.capture_deaths.get(),'window_geometry':self.root.geometry(),
                            'muted':self.gallery.muted,'volume':self.gallery.volume.get()})
             save_password(self.password.get())
         except (OSError,ValueError):
