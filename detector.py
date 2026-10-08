@@ -70,6 +70,12 @@ class Detector:
         for e in entries:
             killer,victim=normalized(e['killer']),normalized(e['victim'])
             identity=normalized(self.name)
+            # Compass/background OCR can precede a valid killer token. Player
+            # names are single tokens: require a complete final token, never
+            # a substring or fuzzy match within another player's name.
+            tail=e['killer'].split()[-1] if e['killer'].split() else ''
+            if identity and normalized(tail)==identity:
+                killer=identity; e['killer']=self.name
             # A lobby exit legitimately attributes both sides to the player.
             role='death' if victim==identity else 'kill' if killer==identity else None
             if not role or not self.name: continue
