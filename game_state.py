@@ -37,7 +37,7 @@ class GameGate:
             self.hits=0; self.candidate=''
             if self.missing_since is None: self.missing_since=now
             if now-self.missing_since>=self.missing_seconds:
-                self.armed=False; reason='name and health bar absent for five seconds'
+                self.armed=False; reason=f'name and health bar absent for {self.missing_seconds:g} seconds'
         else:
             self.missing_since=None
             if not self.armed:
