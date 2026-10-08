@@ -15,8 +15,9 @@ def clock(seconds):
 class ClipGallery:
     def __init__(self,parent,say):
         self.say=say; self.path=None; self.photo=None; self.image=None
+        self.scrubbing=False
         self.duration=0; self.position=0; self.paused=True; self.muted=False; self.volume=tk.DoubleVar(value=.7)
-        self.token=0; self.cache=OrderedDict(); self.closing=False
+        self.scrubbing=False; self.scrub_position=0.; self.token=0; self.cache=OrderedDict(); self.closing=False
         self.engine=PreviewEngine()
         self.index=password_path().parent/'clips.json'
         try:
@@ -36,6 +37,8 @@ class ClipGallery:
         self.screen.bind('<Button-1>',lambda e:self.toggle())
         self.timeline=tk.Canvas(outer,height=20,bg=BG,highlightthickness=0,cursor='hand2')
         self.timeline.pack(fill='x',pady=(8,0)); self.timeline.bind('<Configure>',lambda e:self.draw_progress())
+        self.timeline.bind('<Button-1>',self.scrub_at)
+        self.timeline.bind('<B1-Motion>',self.scrub_at)
         self.timeline.bind('<ButtonRelease-1>',self.seek_at)
         bar=tk.Frame(outer,bg=BG); bar.pack(fill='x',pady=(0,14))
         def button(text,command):
@@ -124,7 +127,7 @@ class ClipGallery:
                         while len(self.cache)>6: self.cache.popitem(last=False)
                     self.render()
                 self.play.configure(text='▶  Play' if self.paused else 'Ⅱ  Pause',state='normal')
-                self.time.configure(text=clock(self.position)+' / '+clock(self.duration))
+                if not self.scrubbing: self.time.configure(text=clock(self.position)+' / '+clock(self.duration))
                 self.draw_progress()
         except queue.Empty: pass
         except Exception as exc:
@@ -140,12 +143,21 @@ class ClipGallery:
     def draw_progress(self):
         canvas=self.timeline; canvas.delete('all'); width=max(1,canvas.winfo_width())
         canvas.create_line(0,10,width,10,fill='#34383f',width=3)
-        x=width*min(1,self.position/self.duration) if self.duration else 0
+        x=width*min(1,(self.scrub_position if self.scrubbing else self.position)/self.duration) if self.duration else 0
         canvas.create_line(0,10,x,10,fill=GOLD,width=3)
         canvas.create_oval(x-4,6,x+4,14,fill=GOLD,outline='')
+    def scrub_at(self,event):
+        if not self.duration: return
+        self.scrubbing=True
+        self.scrub_position=max(0,min(1,event.x/max(1,self.timeline.winfo_width())))*self.duration
+        self.time.configure(text=clock(self.scrub_position)+' / '+clock(self.duration))
+        self.draw_progress()
     def seek_at(self,event):
+        self.scrubbing=False
         if self.duration:
-            self.engine.command('seek',max(0,min(1,event.x/max(1,self.timeline.winfo_width())))*self.duration)
+            self.position=max(0,min(1,event.x/max(1,self.timeline.winfo_width())))*self.duration
+            self.draw_progress()
+            self.engine.command('seek',self.position)
     def toggle(self):
         if self.path: self.engine.command('toggle')
     def restart(self):
