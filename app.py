@@ -5,17 +5,26 @@ from PIL import Image
 from detector import Detector,crop,ocr,FEED,NAME
 from obs_client import OBS
 from game_state import GameGate,read_name,spectator_present,health_present,SPECTATOR
-from local_settings import load_password,save_password,password_path
-import os
+from local_settings import load_password,save_password,password_path,load_settings,save_settings
+import os,math,re
 
 class App:
     def __init__(self,root):
         self.root=root; root.title('VaultVision 0.1 — prototype'); self.stop=threading.Event(); self.manual=threading.Event(); self.messages=queue.Queue(); self.worker=None; self.shutdown=threading.Event(); self.saved_clips=queue.Queue(); self.clip_labels=queue.Queue(); self.obs_password=''; self.obs_ready=False; self.auto_started=False; self.game_armed=False 
         self.source=tk.StringVar(value='Dark and Darker'); self.password=tk.StringVar(); self.name=tk.StringVar(); self.after=tk.StringVar(value='0'); self.tesseract=tk.StringVar(value=r'C:\Program Files\Tesseract-OCR\tesseract.exe')
+        self.hud_timeout=tk.StringVar(value='30')
+        self.settings=load_settings()
+        for key,var in [('source',self.source),('character_override',self.name),('save_delay',self.after),('tesseract',self.tesseract),('hud_timeout',self.hud_timeout)]:
+            value=self.settings.get(key)
+            if isinstance(value,(str,int,float)): var.set(str(value))
         try: self.password.set(load_password())
         except (OSError,UnicodeError): self.messages.put('Could not load the local password file; enter the password manually.')
         from ui_theme import build_ui
         build_ui(self)
+        geometry=self.settings.get('window_geometry','')
+        if isinstance(geometry,str) and re.fullmatch(r'\d{3,5}x\d{3,5}[+-]\d+[+-]\d+',geometry):
+            root.geometry(geometry)
+        self.gallery.restore_preferences(self.settings)
         root.protocol('WM_DELETE_WINDOW',self.close); root.after(100,self.poll)
         self.obs_password=self.password.get()
         threading.Thread(target=self.watch_obs,daemon=True).start()
@@ -94,12 +103,15 @@ class App:
         if self.worker and self.worker.is_alive(): return
         try:
             delay=float(self.after.get())
-            if not 0<=delay<=30: raise ValueError()
+            if not math.isfinite(delay) or not 0<=delay<=30: raise ValueError()
+            timeout=float(self.hud_timeout.get())
+            if not math.isfinite(timeout) or not 1<=timeout<=600:
+                self.say('HUD-absence timeout must be 1–600 seconds.'); return
         except ValueError: self.say('After-event delay must be 0–30 seconds.'); return
-        args=(self.source.get(),self.password.get(),self.name.get(),delay,self.tesseract.get())
+        args=(self.source.get(),self.password.get(),self.name.get(),delay,self.tesseract.get(),timeout)
         self.auto_started=True; self.stop.clear(); self.manual.clear(); self.worker=threading.Thread(target=self.run,args=args,daemon=True); self.worker.start()
-    def run(self,source,password,name,delay,executable):
-        obs=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; gate=GameGate()
+    def run(self,source,password,name,delay,executable,timeout):
+        obs=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; gate=GameGate(missing_seconds=timeout)
         try:
             obs=OBS(password)
             if not obs.request('GetReplayBufferStatus')['outputActive']: obs.request('StartReplayBuffer')
@@ -159,6 +171,15 @@ class App:
             self.say('Disarmed. OBS replay buffer remains under your control.')
     def close(self):
         if getattr(self,'closing',False): return
+        try:
+            save_settings({'source':self.source.get(),'character_override':self.name.get(),
+                           'save_delay':self.after.get(),'tesseract':self.tesseract.get(),
+                           'hud_timeout':self.hud_timeout.get(),'window_geometry':self.root.geometry(),
+                           'muted':self.gallery.muted,'volume':self.gallery.volume.get()})
+            save_password(self.password.get())
+        except (OSError,ValueError):
+            from tkinter import messagebox
+            messagebox.showerror('Settings','Could not save settings locally.',parent=self.root)
         self.closing=True; self.stop.set(); self.shutdown.set(); self.gallery.close()
         self.close_done=threading.Event(); self.close_error=''
         self.status_label.configure(text='●  CLOSING OBS')
