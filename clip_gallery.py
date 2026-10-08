@@ -30,9 +30,14 @@ class ClipGallery:
         self.time=tk.Label(buttons,text='0:00',bg='#171a1f',fg='#aca79b'); self.time.pack(side='right',padx=12)
         self.refresh()
     def refresh(self):
+        selected=self.list.curselection()
+        previous=self.list.get(selected[0]) if selected else None
         self.list.delete(0,'end')
         for record in self.records:
             self.list.insert('end',record.get('label','Replay')+'  •  '+Path(record['path']).name)
+        if previous:
+            for i in range(self.list.size()):
+                if self.list.get(i)==previous: self.list.selection_set(i); break
     def add(self,path,label='Replay'):
         path=str(Path(path))
         if not Path(path).is_file() or any(r['path']==path for r in self.records): return
