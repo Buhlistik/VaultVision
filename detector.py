@@ -11,11 +11,33 @@ def crop(image, box):
 def ocr(image, executable='tesseract', psm=6):
     image=ImageOps.grayscale(image.resize((image.width*3,image.height*3)))
     image=ImageOps.autocontrast(image)
+    executable=executable.strip().strip('"')
     with tempfile.TemporaryDirectory() as d:
         p=Path(d)/'ocr.png'; image.save(p)
-        r=subprocess.run([executable,str(p),'stdout','--psm',str(psm)],capture_output=True,text=True,timeout=8)
-        if r.returncode: raise RuntimeError(r.stderr.strip())
-        return r.stdout.strip()
+        output=Path(d)/'result'
+        errors=Path(d)/'errors.txt'
+        # File output avoids reliance on inherited console streams in a
+        # PyInstaller --windowed application.
+        try:
+            with errors.open('wb') as error_file:
+                r=subprocess.run(
+                    [executable,str(p),str(output),'-l','eng','--psm',str(psm)],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=error_file, timeout=8,
+                    creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        except FileNotFoundError as exc:
+            raise RuntimeError('Tesseract was not found. Set the path to tesseract.exe in VaultVision.') from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError('Tesseract took longer than 8 seconds. Check the OCR installation.') from exc
+        except OSError as exc:
+            raise RuntimeError('Could not start Tesseract: '+str(exc)) from exc
+        if r.returncode:
+            details=errors.read_text(encoding='utf-8',errors='replace').strip()
+            raise RuntimeError(f'Tesseract failed (exit {r.returncode}): '+(details or 'No diagnostic output. Check that the executable is Tesseract OCR and English language data is installed.'))
+        result=output.with_suffix('.txt')
+        if not result.exists():
+            raise RuntimeError('Tesseract did not create OCR output. Check the executable path points to tesseract.exe.')
+        return result.read_text(encoding='utf-8',errors='replace').strip()
 def normalized(s): return re.sub(r'[^a-z0-9]','',s.lower())
 def parse_feed(text):
     for line in text.splitlines():
