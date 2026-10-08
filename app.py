@@ -6,7 +6,7 @@ from detector import Detector,crop,ocr,FEED,NAME
 from obs_client import OBS
 from capture import Capture
 from screen_reader import ScreenReader,replay_description
-from game_state import GameGate,read_name,spectator_present,health_present,SPECTATOR
+from game_state import GameGate,read_name,spectator_present,health_present,SPECTATOR,recover_death
 from local_settings import load_password,save_password,password_path,load_settings,save_settings
 import os,math,re
 
@@ -163,8 +163,9 @@ class App:
                     if spectator:
                         events=[event for event in events if event['kind']=='death']
                         if not events and not detector.dead and detector.name:
+                            recovered=recover_death(image,executable,detector.name,time.monotonic())
                             detector.dead=True
-                            events=[{'kind':'death','killer':'Unknown','victim':detector.name,'weapon':''}]
+                            events=[recovered or {'kind':'death','killer':'Unknown','victim':detector.name,'weapon':''}]
                     elif was_armed and detector.dead:
                         events=[event for event in events if event['kind']=='death']
                 else: feed_text=''

@@ -21,8 +21,12 @@ class Tests(unittest.TestCase):
         self.assertTrue(g.update('Player',False,False,40)[0])
     def test_rearm_after_spectating(self):
         g=GameGate(); self.arm(g); g.update('Other',True,True,3)
-        for t in (4,5): self.assertFalse(g.update('NewCharacter',True,False,t)[0])
-        self.assertTrue(g.update('NewCharacter',True,False,6)[0])
+        for t in range(4,20):
+            self.assertFalse(g.update('Other',True,False,t)[0])
+        g.update('',False,False,20)
+        g.update('',False,False,25)
+        for t in (26,27): self.assertFalse(g.update('NewCharacter',True,False,t)[0])
+        self.assertTrue(g.update('NewCharacter',True,False,28)[0])
     def test_cannot_arm_with_partial_hud(self):
         g=GameGate()
         for t in range(10): self.assertFalse(g.update('Player',False,False,t)[0])
