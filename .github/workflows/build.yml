@@ -6,6 +6,11 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    concurrency:
+      group: vaultvision-windows-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -14,6 +19,27 @@ jobs:
       - run: python -m pip install -r requirements.txt pyinstaller
       - run: python -m unittest discover -v
       - run: pyinstaller --noconfirm --onedir --windowed --collect-all ffpyplayer --name VaultVision app.py
+      - name: Package portable updater
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/Update-VaultVision.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { $errors | Format-List; exit 1 }
+          Copy-Item Update-VaultVision.cmd,Update-VaultVision.ps1 dist/VaultVision/
+          Compress-Archive -Path dist/VaultVision/* -DestinationPath VaultVision-Windows.zip
+          (Get-FileHash VaultVision-Windows.zip -Algorithm SHA256).Hash.ToLower() | Set-Content VaultVision-Windows.zip.sha256 -Encoding ascii
+      - name: Publish latest successful build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create latest --title "Latest Windows build" --notes "Portable VaultVision build and updater." --target "${{ github.sha }}"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          gh release upload latest VaultVision-Windows.zip VaultVision-Windows.zip.sha256 --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7
         with:
           name: VaultVision-Windows-prototype

@@ -27,9 +27,13 @@ class Tests(unittest.TestCase):
         g.update('',False,False,25)
         for t in (26,27): self.assertFalse(g.update('NewCharacter',True,False,t)[0])
         self.assertTrue(g.update('NewCharacter',True,False,28)[0])
-    def test_cannot_arm_with_partial_hud(self):
+    def test_cannot_arm_without_health(self):
         g=GameGate()
         for t in range(10): self.assertFalse(g.update('Player',False,False,t)[0])
+    def test_health_arms_without_name_or_killfeed(self):
+        g=GameGate()
+        for t in (0,1): self.assertFalse(g.update('',True,False,t)[0])
+        self.assertTrue(g.update('',True,False,2)[0])
     def test_spectator_words(self):
         self.assertTrue(spectator_present('Watch Death Cam D\nChange View N'))
         self.assertFalse(spectator_present('Rondel Dagger'))

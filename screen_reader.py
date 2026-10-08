@@ -12,13 +12,13 @@ class ScreenReader:
         if spectator_present(ocr(crop(image,SPECTATOR),executable,6)): return True
         return death_menu_present(ocr(crop(image,DEATH_MENU),executable,6))
 
-    def read(self,image,executable,armed):
+    def read(self,image,executable,armed,need_name=False):
         health=health_present(image)
         spectator_task=self.pool.submit(self.read_spectator,image,executable)
         # Identity is frozen during a match. Only read it again when needed
         # to arm or to establish that BOTH HUD elements have disappeared.
         name_task=None
-        if not armed or not health:
+        if not armed or not health or need_name:
             name_task=self.pool.submit(read_name,image,executable)
         feed_task=self.pool.submit(ocr,crop(image,FEED),executable,6) if armed else None
         spectator=spectator_task.result()

@@ -114,6 +114,8 @@ class App:
             self.log.insert('end',text+'\n',tag)
             if 'OBS replay duration: ' in text:
                 self.replay_label.configure(text=text.split('OBS replay duration: ',1)[1])
+            if 'Gameplay confirmed. Reading your character name' in text:
+                self.character_label.configure(text='Character: reading HUD…')
             if 'Active character: ' in text: self.character_label.configure(text='Character: '+text.split('Active character: ',1)[1])
             self.log.configure(state='normal'); self.log.see('end'); self.log.configure(state='disabled')
         if self.obs_ready and not self.auto_started and not getattr(self,'closing',False):
@@ -165,13 +167,18 @@ class App:
                 capture_done=time.monotonic()
                 feed_started=time.monotonic()
                 # Run feed OCR alongside the HUD checks, then gate events.
-                hud_name,health,spectator,feed_text=reader.read(image,executable,gate.armed)
+                hud_name,health,spectator,feed_text=reader.read(image,executable,gate.armed,need_name=not bool(detector.name))
                 was_armed=gate.armed
                 armed,changed,reason=gate.update(hud_name,health,spectator,time.monotonic())
                 self.game_armed=armed
                 if changed: self.say(('Automatically armed: ' if armed else 'Automatically disarmed: ')+reason)
                 if armed and not was_armed:
-                    detector=Detector(name or hud_name)
+                    detector=Detector(name)
+                    last_name=''
+                    if not name: self.say('Gameplay confirmed. Reading your character name…')
+                if armed and health and not spectator and not detector.name:
+                    detector.update_name(hud_name)
+                if armed and detector.name and detector.name!=last_name:
                     self.say('Active character: '+detector.name); last_name=detector.name
                 events=[]
                 if armed or (was_armed and spectator):

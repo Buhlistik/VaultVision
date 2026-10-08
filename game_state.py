@@ -72,9 +72,8 @@ class GameGate:
         else:
             self.missing_since=None
             if not self.armed:
-                if name and health:
-                    self.hits=self.hits+1 if name==self.candidate else 1
-                    self.candidate=name
-                    if self.hits>=3: self.armed=True; reason='name and health bar confirmed'
+                if health:
+                    self.hits+=1
+                    if self.hits>=3: self.armed=True; reason='health bar confirmed; spectator UI absent'
                 else: self.hits=0; self.candidate=''
         return self.armed,previous!=self.armed,reason
