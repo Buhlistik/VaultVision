@@ -12,7 +12,7 @@ GOLD='#c7a96b'
 def build_ui(app):
     root=app.root
     root.title('VaultVision • Dark and Darker')
-    root.geometry('1040x740'); root.minsize(900,690)
+    root.geometry('1320x840'); root.minsize(1120,760)
     root.configure(bg=BG)
     style=ttk.Style(root); style.theme_use('clam')
     style.configure('.',font=('Segoe UI',10),background=PANEL,foreground=TEXT)
@@ -39,7 +39,7 @@ def build_ui(app):
     app.status_label.pack(side='right')
     tk.Frame(root,bg=EDGE,height=1).pack(fill='x',padx=28)
     body=tk.Frame(root,bg=BG,padx=28,pady=22); body.pack(fill='both',expand=True)
-    body.columnconfigure(0,weight=0); body.columnconfigure(1,weight=1)
+    body.columnconfigure(0,weight=0); body.columnconfigure(1,weight=1); body.columnconfigure(2,weight=1)
     body.rowconfigure(0,weight=1)
     left=tk.Frame(body,bg=PANEL,highlightbackground=EDGE,highlightthickness=1,padx=22,pady=22)
     left.grid(row=0,column=0,sticky='ns',padx=(0,18))
@@ -86,6 +86,10 @@ def build_ui(app):
     scroll.pack(side='right',fill='y'); app.log.pack(side='left',fill='both',expand=True)
     app.log.tag_configure('kill',foreground='#d7be7d')
     app.log.tag_configure('error',foreground='#ed9382')
+    from clip_gallery import ClipGallery
+    clips=tk.Frame(body,bg=PANEL,highlightbackground=EDGE,highlightthickness=1)
+    clips.grid(row=0,column=2,sticky='nsew',padx=(18,0))
+    app.gallery=ClipGallery(clips,app.say)
     footer=tk.Frame(root,bg=BG,padx=28,pady=12); footer.pack(fill='x')
     label(footer,'VAULTVISION  /  PROTOTYPE',MUTED,('Segoe UI',9)).pack(side='left')
     label(footer,'1080p • OBS replay capture',MUTED,('Segoe UI',9)).pack(side='right')
