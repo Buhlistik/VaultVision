@@ -64,14 +64,14 @@ def build_ui(app):
     settings.columnconfigure(1,weight=1)
     app.entries=[]
     fields=[('OBS source',app.source),('WebSocket password',app.password),
-            ('Character override',app.name),('Save delay (seconds)',app.after),
+            ('Character override',app.name),('Save delay (seconds)',app.after),('HUD absence timeout (seconds)',app.hud_timeout),
             ('Tesseract executable',app.tesseract)]
     for row,(title,var) in enumerate(fields,1):
         label(settings,title,MUTED).grid(row=row,column=0,sticky='w',padx=(0,16),pady=6)
         entry=ttk.Entry(settings,textvariable=var,show='●' if var is app.password else '')
         entry.grid(row=row,column=1,sticky='ew',pady=6)
         app.entries.append(entry)
-    actions=tk.Frame(settings,bg=PANEL); actions.grid(row=6,columnspan=2,sticky='e',pady=(10,0))
+    actions=tk.Frame(settings,bg=PANEL); actions.grid(row=7,columnspan=2,sticky='e',pady=(10,0))
     ttk.Button(actions,text='Save password',command=app.store_password).pack(side='left',padx=(0,8))
     ttk.Button(actions,text='Open password file',command=app.open_password_file).pack(side='left')
     activity=tk.Frame(right,bg=PANEL,highlightbackground=EDGE,highlightthickness=1,padx=20,pady=16)
