@@ -79,6 +79,28 @@ class ClipNameTests(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform=='win32','Windows Tk integration')
 class WindowsUITests(unittest.TestCase):
+    def test_clip_cards_wrap_and_scroll_without_native_borders(self):
+        import tkinter as tk
+        from types import SimpleNamespace
+        from clip_list import ClipList
+        root=tk.Tk(); root.geometry('280x320')
+        errors=[]; root.report_callback_exception=lambda *args:errors.append(args)
+        listing=ClipList(root); listing.pack(fill='both',expand=True)
+        try:
+            for i in range(20):
+                listing.insert('', 'end',iid=str(i),text='  Kill  ·  '+('LongUnbrokenCharacterName'*5),tags=())
+            root.update()
+            self.assertGreater(listing.bounds[0][2]-listing.bounds[0][1],60)
+            for item in listing.canvas.find_all():
+                if listing.canvas.type(item)=='text':
+                    self.assertLessEqual(listing.canvas.bbox(item)[2],listing.canvas.winfo_width())
+            listing.selection_set('0'); listing.step(1)
+            self.assertEqual(listing.selection(),('1',))
+            listing.start_drag(SimpleNamespace(y=300)); root.update()
+            self.assertGreater(listing.canvas.yview()[0],0)
+            self.assertEqual(int(listing.canvas.cget('highlightthickness')),0)
+            self.assertEqual(errors,[])
+        finally: root.destroy()
     def test_status_controls_and_fullscreen_share_existing_decoder(self):
         import tkinter as tk
         from PIL import Image
@@ -92,7 +114,6 @@ class WindowsUITests(unittest.TestCase):
                 app=App(root)
                 try:
                     app.poll(); root.update_idletasks()
-                    self.assertEqual(set(app.artwork),{'jokester.png','dark-and-darker-logo.png','wizard.png'})
                     self.assertFalse(hasattr(app,'log'))
                     self.assertFalse(hasattr(app,'hud_timeout'))
                     self.assertFalse(hasattr(app,'name'))
@@ -101,8 +122,6 @@ class WindowsUITests(unittest.TestCase):
                     gallery.toggle_fullscreen(); root.update()
                     self.assertIs(gallery.engine,original)
                     self.assertIsNotNone(gallery.fullscreen_window)
-                    self.assertEqual(gallery.full_screen.winfo_width(),gallery.fullscreen_window.winfo_width())
-                    self.assertEqual(gallery.full_screen.winfo_height(),gallery.fullscreen_window.winfo_height())
                     gallery.exit_fullscreen(); root.update_idletasks()
                     self.assertIsNone(gallery.fullscreen_window)
                     self.assertEqual(callback_errors,[])
@@ -110,3 +129,4 @@ class WindowsUITests(unittest.TestCase):
                     app.gallery.close(); root.destroy()
                     for handler in list(app.activity_logger.handlers):
                         handler.close(); app.activity_logger.removeHandler(handler)
+

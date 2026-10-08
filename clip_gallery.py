@@ -7,6 +7,7 @@ from tkinter import ttk,filedialog,simpledialog,messagebox
 from PIL import ImageTk,ImageOps
 from local_settings import password_path
 from preview_engine import PreviewEngine
+from clip_list import ClipList
 
 BG='#171a1f'; INK='#e7dfcd'; MUTED='#92979f'; GOLD='#c7a96b'
 def clock(seconds):
@@ -31,13 +32,15 @@ class ClipGallery:
         self.count=tk.Label(header,bg=BG,fg=MUTED,font=('Segoe UI',10)); self.count.pack(side='right')
         self.title=tk.Label(outer,text='Select a replay to preview',bg=BG,fg=MUTED,font=('Segoe UI',10),anchor='w',width=1)
         self.title.pack(fill='x',pady=(5,16))
+        self.title.configure(justify='left')
+        self.title.bind('<Configure>',lambda event:self.title.configure(wraplength=max(100,event.width)))
         workspace=tk.Frame(outer,bg=BG); workspace.pack(fill='both',expand=True)
-        library=tk.Frame(workspace,bg='#13161b',width=250,padx=12,pady=12)
+        library=tk.Frame(workspace,bg='#13161b',width=280,padx=12,pady=12)
         library.pack(side='right',fill='y',padx=(14,0)); library.pack_propagate(False)
         player_area=tk.Frame(workspace,bg=BG); player_area.pack(side='left',fill='both',expand=True)
         self.viewport=tk.Frame(player_area,bg='#080a0d',height=240,highlightbackground='#30343b',highlightthickness=1); self.viewport.pack(fill='both',expand=True)
         self.viewport.pack_propagate(False)
-        self.screen=tk.Label(self.viewport,bd=0,padx=0,pady=0,text='Your next highlight belongs here\n\nSaved replays appear below. You can also import a video.',bg='#080a0d',fg=MUTED,font=('Segoe UI',12))
+        self.screen=tk.Label(self.viewport,bd=0,padx=0,pady=0,text='Your next highlight belongs here\n\nSaved replays appear in the library. You can also import a video.',bg='#080a0d',fg=MUTED,font=('Segoe UI',12))
         self.screen.pack(fill='both',expand=True); self.screen.bind('<Configure>',self.resize)
         self.screen.bind('<Button-1>',lambda e:self.toggle())
         self.screen.bind('<Double-Button-1>',lambda e:self.toggle_fullscreen())
@@ -63,25 +66,18 @@ class ClipGallery:
         self.time=tk.Label(bar,text='0:00 / 0:00',bg=BG,fg=MUTED,font=('Segoe UI',10)); self.time.pack(side='right')
         tools=tk.Frame(library,bg='#13161b'); tools.pack(fill='x',pady=(0,10))
         tk.Label(tools,text='SAVED CLIPS',bg='#13161b',fg=GOLD,font=('Segoe UI',9,'bold')).pack(anchor='w',pady=(0,10))
-        tool_actions=tk.Frame(tools,bg='#13161b'); tool_actions.pack(fill='x')
-        tk.Button(tool_actions,text='Import',command=self.import_clips,bg=BG,fg=INK,
-                  activebackground=BG,activeforeground=GOLD,bd=0,cursor='hand2').pack(side='right')
-        tk.Button(tool_actions,text='Folder',command=self.open_folder,bg=BG,fg=MUTED,
-                  activebackground=BG,activeforeground=GOLD,bd=0,cursor='hand2').pack(side='right',padx=10)
-        self.rename_button=tk.Button(tool_actions,text='Rename',command=self.rename_clip,bg=BG,fg=INK,
-                  activebackground=BG,activeforeground=GOLD,bd=0,cursor='hand2',state='disabled')
-        self.rename_button.pack(side='right',padx=8)
-        style=ttk.Style(parent)
-        style.configure('Clips.Treeview',background='#13161b',fieldbackground='#13161b',foreground=INK,
-                        rowheight=38,borderwidth=0,font=('Segoe UI',10))
-        style.map('Clips.Treeview',background=[('selected','#34312b')],foreground=[('selected','#f2e3c5')])
-        listing=tk.Frame(library,bg='#13161b'); listing.pack(fill='both',expand=True)
-        self.list=ttk.Treeview(listing,show='tree',height=4,selectmode='browse',style='Clips.Treeview')
-        self.list.column('#0',width=200,stretch=True)
-        self.list.tag_configure('even',background='#13161b')
-        self.list.tag_configure('odd',background='#191d23')
-        scroll=ttk.Scrollbar(listing,command=self.list.yview); self.list.configure(yscrollcommand=scroll.set)
-        scroll.pack(side='right',fill='y'); self.list.pack(side='left',fill='both',expand=True)
+        tk.Button(tools,text='+  Add videos…',command=self.import_clips,bg='#252931',fg=INK,
+                  activebackground='#373b44',activeforeground=INK,bd=0,pady=8,cursor='hand2',
+                  font=('Segoe UI',10)).pack(fill='x')
+        actions=tk.Frame(library,bg='#13161b'); actions.pack(side='bottom',fill='x',pady=(12,0))
+        tk.Label(actions,text='SELECTED CLIP',bg='#13161b',fg=MUTED,font=('Segoe UI',8,'bold')).pack(anchor='w',pady=(0,6))
+        self.rename_button=tk.Button(actions,text='Rename clip',command=self.rename_clip,bg='#252931',fg=INK,
+                  activebackground='#373b44',activeforeground=INK,bd=0,pady=8,cursor='hand2',state='disabled')
+        self.rename_button.pack(fill='x',pady=(0,6))
+        self.folder_button=tk.Button(actions,text='Open clip folder',command=self.open_folder,bg='#252931',fg=INK,
+                  activebackground='#373b44',activeforeground=INK,bd=0,pady=8,cursor='hand2',state='disabled')
+        self.folder_button.pack(fill='x')
+        self.list=ClipList(library); self.list.pack(fill='both',expand=True)
         self.list.bind('<<TreeviewSelect>>',self.select); self.refresh()
         self.job=self.screen.after(30,self.poll)
     def restore_preferences(self,settings):
@@ -186,7 +182,7 @@ class ClipGallery:
         record=self.records[int(choice[0])]
         if record['path']==self.path: return
         self.path=record['path']; self.title.configure(text=record.get('title') or Path(self.path).name)
-        self.rename_button.configure(state='normal'); self.fullscreen_button.configure(state='normal')
+        self.rename_button.configure(state='normal'); self.folder_button.configure(state='normal'); self.fullscreen_button.configure(state='normal')
         self.duration=0; self.position=0; self.paused=True
         self.play.configure(text='▶  Play',state='disabled'); self.time.configure(text='Loading…')
         self.image=self.cache.get(self.path)
