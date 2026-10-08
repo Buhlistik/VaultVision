@@ -31,7 +31,7 @@ class App:
             try:
                 if connection is None:
                     connection=OBS(self.obs_password)
-                    if not connection.request('GetReplayBufferStatus')['outputActive']:
+                    if not self.shutdown.is_set() and not connection.request('GetReplayBufferStatus')['outputActive']:
                         connection.request('StartReplayBuffer')
                     self.say('OBS replay buffer ready.')
                     last_error=''
@@ -140,6 +140,36 @@ class App:
             if obs: obs.close()
             self.say('Disarmed. OBS replay buffer remains under your control.')
     def close(self):
-        self.stop.set(); self.shutdown.set(); self.gallery.close(); self.root.destroy()
+        if getattr(self,'closing',False): return
+        self.closing=True; self.stop.set(); self.shutdown.set(); self.gallery.close()
+        self.close_done=threading.Event(); self.close_error=''
+        self.status_label.configure(text='●  CLOSING OBS')
+        password=self.password.get()
+        def finish():
+            connection=None
+            try:
+                # Let detection finish its in-flight request before stopping the buffer.
+                if self.worker: self.worker.join(timeout=10)
+                try:
+                    connection=OBS(password)
+                    if connection.request('GetReplayBufferStatus')['outputActive']:
+                        connection.request('StopReplayBuffer')
+                except Exception:
+                    pass  # Normal window-close still works without WebSocket access.
+                finally:
+                    if connection: connection.close()
+                from obs_shutdown import close_obs_windows
+                close_obs_windows()
+            except Exception as exc: self.close_error=str(exc)
+            finally: self.close_done.set()
+        threading.Thread(target=finish,daemon=True).start()
+        self.root.after(100,self.finish_close)
+    def finish_close(self):
+        if not self.close_done.is_set():
+            self.root.after(100,self.finish_close); return
+        if self.close_error:
+            from tkinter import messagebox
+            messagebox.showerror('OBS shutdown',self.close_error,parent=self.root)
+        self.root.destroy()
 if __name__=='__main__':
     root=tk.Tk(); App(root); root.mainloop()
