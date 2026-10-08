@@ -15,7 +15,7 @@ def clock(seconds):
 class ClipGallery:
     def __init__(self,parent,say):
         self.say=say; self.path=None; self.photo=None; self.image=None
-        self.duration=0; self.position=0; self.paused=True; self.muted=False
+        self.duration=0; self.position=0; self.paused=True; self.muted=False; self.volume=tk.DoubleVar(value=.7)
         self.token=0; self.cache=OrderedDict(); self.closing=False
         self.engine=PreviewEngine()
         self.index=password_path().parent/'clips.json'
@@ -45,6 +45,11 @@ class ClipGallery:
             b.pack(side='left',padx=(0,6)); return b
         self.play=button('▶  Play',self.toggle); self.play.configure(state='disabled')
         button('↺',self.restart); self.mute_button=button('Mute',self.mute)
+        self.volume_slider=tk.Scale(bar,from_=0,to=1,resolution=.05,orient='horizontal',
+                    variable=self.volume,command=self.change_volume,length=70,
+                    showvalue=False,bg=BG,troughcolor='#34383f',highlightthickness=0,
+                    activebackground=GOLD,bd=0,sliderlength=10)
+        self.volume_slider.pack(side='left',padx=5)
         self.time=tk.Label(bar,text='0:00 / 0:00',bg=BG,fg=MUTED,font=('Segoe UI',10)); self.time.pack(side='right')
         tools=tk.Frame(outer,bg=BG); tools.pack(fill='x',pady=(6,8))
         tk.Label(tools,text='RECENT CLIPS',bg=BG,fg=GOLD,font=('Segoe UI',9,'bold')).pack(side='left')
@@ -63,6 +68,14 @@ class ClipGallery:
         scroll.pack(side='right',fill='y'); self.list.pack(side='left',fill='x',expand=True)
         self.list.bind('<<TreeviewSelect>>',self.select); self.refresh()
         self.job=self.screen.after(30,self.poll)
+    def restore_preferences(self,settings):
+        value=settings.get('volume',.7)
+        if isinstance(value,(int,float)) and math.isfinite(value): self.volume.set(max(0,min(1,value)))
+        self.muted=bool(settings.get('muted',False))
+        self.mute_button.configure(text='Unmute' if self.muted else 'Mute')
+        self.engine.command('volume',self.volume.get()); self.engine.command('mute',self.muted)
+    def change_volume(self,value):
+        self.engine.command('volume',float(value))
     def refresh(self):
         self.list.delete(*self.list.get_children())
         for i,record in enumerate(self.records):
