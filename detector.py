@@ -3,7 +3,8 @@ import re, subprocess, tempfile, time
 from pathlib import Path
 from PIL import Image, ImageOps
 
-FEED = (.68, 0, 1, .16)
+# Ten feed rows extend to about y=220 at 1080p; include a margin.
+FEED = (.68, 0, 1, .23)
 NAME = (.455, .9, .55, .93)
 def crop(image, box):
     w,h=image.size
