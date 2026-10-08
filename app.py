@@ -4,11 +4,15 @@ from tkinter import ttk
 from PIL import Image
 from detector import Detector,crop,ocr,FEED,NAME
 from obs_client import OBS
+from local_settings import load_password,save_password,password_path
+import os
 
 class App:
     def __init__(self,root):
         self.root=root; root.title('VaultVision 0.1 — prototype'); self.stop=threading.Event(); self.manual=threading.Event(); self.messages=queue.Queue(); self.worker=None
         self.source=tk.StringVar(value='Dark and Darker'); self.password=tk.StringVar(); self.name=tk.StringVar(); self.after=tk.StringVar(value='0'); self.tesseract=tk.StringVar(value=r'C:\Program Files\Tesseract-OCR\tesseract.exe')
+        try: self.password.set(load_password())
+        except (OSError,UnicodeError): self.messages.put('Could not load the local password file; enter the password manually.')
         frame=ttk.Frame(root,padding=18); frame.pack(fill='both',expand=True)
         for row,(label,var) in enumerate([('OBS source name',self.source),('OBS WebSocket password',self.password),('Character name (blank = automatic)',self.name),('Save delay after detection (seconds)',self.after),('Tesseract executable',self.tesseract)]):
             ttk.Label(frame,text=label).grid(row=row,column=0,sticky='w',pady=5)
@@ -17,9 +21,21 @@ class App:
         self.start_button=ttk.Button(buttons,text='Arm session',command=self.start); self.start_button.pack(side='left')
         ttk.Button(buttons,text='Disarm',command=self.stop.set).pack(side='left',padx=8)
         ttk.Button(buttons,text='Save replay now',command=self.manual.set).pack(side='left')
+        ttk.Button(buttons,text='Save password',command=self.store_password).pack(side='left',padx=8)
+        ttk.Button(buttons,text='Open password file',command=self.open_password_file).pack(side='left')
         ttk.Label(frame,text='Arm for your match. Disarm before spectating or switching characters.\nOBS replay length controls clip length; use 60 seconds initially.').grid(row=6,columnspan=2)
         self.log=tk.Text(frame,width=85,height=14,state='disabled'); self.log.grid(row=7,columnspan=2,pady=12)
         root.protocol('WM_DELETE_WINDOW',self.close); root.after(100,self.poll)
+    def store_password(self):
+        try:
+            save_password(self.password.get())
+            self.say('Password saved locally; it will autofill on next launch.')
+        except (OSError,ValueError): self.say('Could not save the password file.')
+    def open_password_file(self):
+        try:
+            load_password()
+            os.startfile(str(password_path()))
+        except (OSError,AttributeError,UnicodeError): self.say('Could not open the password file: '+str(password_path()))
     def say(self,text): self.messages.put(time.strftime('%H:%M:%S')+' '+text)
     def poll(self):
         while not self.messages.empty():
