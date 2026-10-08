@@ -1,5 +1,5 @@
 """Modern clip browser; decoder lifecycle never runs on the Tk thread."""
-import json,os,queue
+import json,os,queue,math
 from collections import OrderedDict
 from pathlib import Path
 import tkinter as tk
@@ -10,7 +10,7 @@ from preview_engine import PreviewEngine
 
 BG='#171a1f'; INK='#e7dfcd'; MUTED='#92979f'; GOLD='#c7a96b'
 def clock(seconds):
-    value=max(0,int(seconds or 0)); return f'{value//60}:{value%60:02d}'
+    value=max(0,int(seconds or 0)) if math.isfinite(float(seconds or 0)) else 0; return f'{value//60}:{value%60:02d}'
 
 class ClipGallery:
     def __init__(self,parent,say):
@@ -36,14 +36,14 @@ class ClipGallery:
         self.screen.bind('<Button-1>',lambda e:self.toggle())
         self.timeline=tk.Canvas(outer,height=20,bg=BG,highlightthickness=0,cursor='hand2')
         self.timeline.pack(fill='x',pady=(8,0)); self.timeline.bind('<Configure>',lambda e:self.draw_progress())
-        self.timeline.bind('<Button-1>',self.seek_at); self.timeline.bind('<ButtonRelease-1>',self.seek_at)
+        self.timeline.bind('<ButtonRelease-1>',self.seek_at)
         bar=tk.Frame(outer,bg=BG); bar.pack(fill='x',pady=(0,14))
         def button(text,command):
             b=tk.Button(bar,text=text,command=command,bg='#252931',fg=INK,
                         activebackground='#373b44',activeforeground=INK,relief='flat',
                         bd=0,padx=12,pady=7,cursor='hand2',font=('Segoe UI',10))
             b.pack(side='left',padx=(0,6)); return b
-        self.play=button('▶  Play',self.toggle)
+        self.play=button('▶  Play',self.toggle); self.play.configure(state='disabled')
         button('↺',self.restart); self.mute_button=button('Mute',self.mute)
         self.time=tk.Label(bar,text='0:00 / 0:00',bg=BG,fg=MUTED,font=('Segoe UI',10)); self.time.pack(side='right')
         tools=tk.Frame(outer,bg=BG); tools.pack(fill='x',pady=(6,8))
@@ -88,7 +88,7 @@ class ClipGallery:
         if record['path']==self.path: return
         self.path=record['path']; self.title.configure(text=Path(self.path).name)
         self.duration=0; self.position=0; self.paused=True
-        self.play.configure(text='▶  Play'); self.time.configure(text='Loading…')
+        self.play.configure(text='▶  Play',state='disabled'); self.time.configure(text='Loading…')
         self.image=self.cache.get(self.path)
         if self.image: self.render()
         else: self.photo=None; self.screen.configure(image='',text='Loading preview…')
@@ -101,6 +101,7 @@ class ClipGallery:
                 if token!=self.token: continue
                 if kind=='error':
                     self.screen.configure(image='',text='Unable to preview this clip')
+                    self.play.configure(state='disabled')
                     self.say('Preview error: '+data); continue
                 image,self.position,self.duration,self.paused=data
                 if image:
@@ -109,10 +110,12 @@ class ClipGallery:
                         self.cache[self.path]=image.copy()
                         while len(self.cache)>6: self.cache.popitem(last=False)
                     self.render()
-                self.play.configure(text='▶  Play' if self.paused else 'Ⅱ  Pause')
+                self.play.configure(text='▶  Play' if self.paused else 'Ⅱ  Pause',state='normal')
                 self.time.configure(text=clock(self.position)+' / '+clock(self.duration))
                 self.draw_progress()
         except queue.Empty: pass
+        except Exception as exc:
+            self.say('Preview display error: '+str(exc))
         self.job=self.screen.after(30,self.poll)
     def render(self):
         if self.image is None: return
