@@ -4,6 +4,7 @@ from tkinter import ttk
 from pathlib import Path
 import sys
 from PIL import Image,ImageTk
+from native_chrome import theme_titlebar
 
 BG='#0d0f12'
 PANEL='#171a1f'
@@ -17,6 +18,7 @@ def build_ui(app):
     root.title('VaultVision • Dark and Darker')
     root.geometry('1480x850'); root.minsize(1120,760)
     root.configure(bg=BG)
+    theme_titlebar(root,caption=PANEL,text=GOLD,border=EDGE)
     app.artwork={}
     asset_dir=Path(__file__).resolve().parent/'assets'
     def artwork(name,size):
@@ -59,6 +61,7 @@ def build_ui(app):
     settings_window=tk.Toplevel(root)
     settings_window.title('VaultVision — Settings')
     settings_window.configure(bg=BG)
+    theme_titlebar(settings_window,caption=PANEL,text=GOLD,border=EDGE)
     settings_window.geometry('700x600'); settings_window.minsize(640,540)
     settings_window.withdraw(); settings_window.transient(root)
     settings_window.protocol('WM_DELETE_WINDOW',settings_window.withdraw)
@@ -161,4 +164,5 @@ def build_ui(app):
     footer=tk.Frame(root,bg=BG,padx=24,pady=10); footer.pack(fill='x')
     label(footer,'Automatic combat highlights',MUTED,('Segoe UI',9)).pack(side='left')
     label(footer,'1080p  •  OBS replay buffer',MUTED,('Segoe UI',9)).pack(side='right')
+
 
