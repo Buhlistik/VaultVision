@@ -11,7 +11,7 @@ Screen-only Dark and Darker killfeed detection with OBS Replay Buffer saves. No 
 7. Arm while controlling your character. Automatic name detection needs three consistent reads of the bottom-center name. A manual name override is available.
 8. Disarm before menus, spectating, or switching characters; re-arm for the next match. This prototype does not yet reliably recognize game/menu/spectator states.
 
-Detected events wait 10 seconds by default before requesting a replay save. OBS controls the clip length and destination. This version saves the complete buffer, not an exact 30-before/10-after trimmed clip. It reports a save *request*, not verified file completion. Closely spaced events before a save share its first deadline; later events can produce overlapping clips. No automatic deletion.
+Detected events request a replay save immediately by default (0 seconds). The optional save delay is measured from recognition, not the actual kill; adding a delay reduces pre-event footage. Use 0 while measuring recognition latency. Logs include wall-clock timestamps, capture time, OCR time and detected feed-line count. OBS controls the clip length and destination. This version saves the complete buffer, not an exact 30-before/10-after trimmed clip. It reports a save *request*, not verified file completion. Closely spaced events before a save share its first deadline; later events can produce overlapping clips. No automatic deletion.
 
 ## Validation
 `python -m unittest discover -v`
