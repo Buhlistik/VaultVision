@@ -1,17 +1,22 @@
 """Concurrent screen OCR; gameplay checks still gate every event."""
 from concurrent.futures import ThreadPoolExecutor
 from detector import crop,ocr,FEED
+from feed_tracker import RowFeedReader
 from game_state import read_name,health_present,spectator_present,SPECTATOR,death_menu_present,DEATH_MENU,lobby_present,lobby_badge_candidate
 
 
 class ScreenReader:
     def __init__(self):
         self.lobby=False
+        self.feed_reader=RowFeedReader()
         self.pool=ThreadPoolExecutor(max_workers=3,thread_name_prefix='screen-ocr')
 
     def read_spectator(self,image,executable):
         if spectator_present(ocr(crop(image,SPECTATOR),executable,6)): return True
         return death_menu_present(ocr(crop(image,DEATH_MENU),executable,6))
+
+    def read_feed(self,image,executable):
+        return self.feed_reader.read(image,executable,recognize=ocr)
 
     def read(self,image,executable,armed,need_name=False):
         self.lobby=False
@@ -24,7 +29,8 @@ class ScreenReader:
         name_task=None
         if not armed or not health or need_name:
             name_task=self.pool.submit(read_name,image,executable)
-        feed_task=self.pool.submit(ocr,crop(image,FEED),executable,6) if armed else None
+        if not armed: self.feed_reader.reset()
+        feed_task=self.pool.submit(self.read_feed,image,executable) if armed else None
         self.lobby=lobby_task.result() if lobby_task else False
         spectator=spectator_task.result()
         name='' if self.lobby or spectator or name_task is None else name_task.result()
@@ -33,6 +39,7 @@ class ScreenReader:
 
     def close(self):
         self.pool.shutdown(wait=True,cancel_futures=True)
+        self.feed_reader.close()
 
 
 def replay_description(obs):

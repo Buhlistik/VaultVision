@@ -29,7 +29,8 @@ class TimingTests(unittest.TestCase):
         try:
             with patch('screen_reader.health_present',return_value=True), \
                  patch('screen_reader.read_name') as name, \
-                 patch('screen_reader.ocr',side_effect=recognize):
+                 patch('screen_reader.ocr',side_effect=recognize), \
+                 patch.object(reader,'read_feed',side_effect=recognize):
                 result=reader.read(Image.new('RGB',(1920,1080)),'unused',True)
                 self.assertTrue(result[2])
                 self.assertEqual(result[0],'')

@@ -22,6 +22,9 @@ VaultVision launches OBS minimized with its replay buffer, waits for readiness, 
 
 If pausing with a pending highlight, VaultVision requests that replay before stopping. Resuming re-reads your identity and retains recent-event deduplication until a confirmed lobby reset.
 
+## Killfeed row tracking
+The ten feed rows are OCRed separately. Before the feed fills, new entries append below existing rows. Once full, multiple existing entries confirm upward movement, including several new kills between scans. Earlier clean reads are preserved when the corresponding shifted row becomes unreadable. New kill attribution still requires your exact normalized character name; tolerant matching only associates previously observed entries. Pixel-identical rows reuse OCR results. A lobby reset clears row state. This does not guarantee recovery of text that was never readable.
+
 ## Clip library
 Completed OBS saves appear in the clip library. Import can add existing recordings.
 - Play/pause, restart, volume and timeline scrubbing work in the embedded player.

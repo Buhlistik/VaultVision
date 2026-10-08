@@ -283,7 +283,7 @@ class App:
                     self.say('Active character: '+detector.name); last_name=detector.name
                 events=[]
                 if not reader.lobby and (armed or (was_armed and spectator)):
-                    if not was_armed: feed_text=ocr(crop(image,FEED),executable)
+                    if not was_armed: feed_text=reader.read_feed(image,executable)
                     events=detector.process(feed_text,time.monotonic())
                     if spectator:
                         events=[event for event in events if event['kind']=='death']
@@ -308,6 +308,8 @@ class App:
                 elapsed=time.monotonic()-scan_started
                 if scans==1 or scans%20==0 or events:
                     self.say(f'Scan: {elapsed:.2f}s; capture: {capture_done-scan_started:.2f}s; parallel OCR checks: {feed_done-feed_started:.2f}s; feed lines: {len(feed_text.splitlines())}.')
+                if events:
+                    self.say(f'Feed tracking: {len(reader.feed_reader.tracker.rows)} entries; upward shift: {reader.feed_reader.tracker.last_shift} rows.')
                 if elapsed>3 and scans%20==0: self.say('Slow scanning: recognition can lag. Send this timing log with the clip.')
                 self.stop.wait(max(0,.5-(time.monotonic()-scan_started)))
         except Exception as e: self.say('Stopped: '+str(e))
