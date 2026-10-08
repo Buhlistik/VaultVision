@@ -21,7 +21,7 @@ class PreviewEngine:
         try: self.frames.put_nowait(value)
         except queue.Full: pass
     def _run(self):
-        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False; ready=False; position=0.
+        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False; ready=False; position=0.; volume=.7
         try:
             while not self.stop.is_set():
                 commands=[]
@@ -33,6 +33,14 @@ class PreviewEngine:
                 if opens: commands=commands[opens[-1]:]
                 for kind,generation,value in commands:
                     try:
+                        if kind=='volume':
+                            volume=max(0,min(1,float(value)))
+                            if player and ready: player.set_volume(volume)
+                            continue
+                        if kind=='mute':
+                            muted=bool(value)
+                            if player and ready: player.set_mute(muted)
+                            continue
                         if kind=='open':
                             if generation!=self.generation: continue
                             if player: player.close_player(); player=None
@@ -41,7 +49,7 @@ class PreviewEngine:
                             else:
                                 from ffpyplayer.player import MediaPlayer
                                 factory=MediaPlayer
-                            player=factory(value,ff_opts={'out_fmt':'rgb24','volume':0.7})
+                            player=factory(value,ff_opts={'out_fmt':'rgb24','volume':volume})
                             player.set_size(640,-1); player.set_mute(True)
                             first=True; paused=False; duration=0.; eof=False; ready=False; position=0.
                         elif player and generation==token and ready:
@@ -71,6 +79,7 @@ class PreviewEngine:
                     if frame:
                         pixels,pts=frame
                         position=pts; ready=True
+                        player.set_volume(volume)
                         image=Image.frombytes('RGB',pixels.get_size(),bytes(pixels.to_bytearray()[0]))
                         if first:
                             player.set_pause(True); player.set_mute(muted)
