@@ -191,8 +191,8 @@ class App:
                 if self.worker: self.worker.join(timeout=10)
                 try:
                     connection=OBS(password)
-                    if connection.request('GetReplayBufferStatus')['outputActive']:
-                        connection.request('StopReplayBuffer')
+                    from obs_shutdown import stop_replay_buffer
+                    stop_replay_buffer(connection)
                 except Exception:
                     pass  # Normal window-close still works without WebSocket access.
                 finally:
