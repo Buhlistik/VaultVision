@@ -21,7 +21,7 @@ class PreviewEngine:
         try: self.frames.put_nowait(value)
         except queue.Full: pass
     def _run(self):
-        player=None; token=0; first=False; paused=True; duration=0.; eof=False
+        player=None; token=0; first=False; paused=True; duration=0.; eof=False; muted=False
         try:
             while not self.stop.is_set():
                 commands=[]
@@ -48,13 +48,15 @@ class PreviewEngine:
                             if kind=='toggle':
                                 if eof: player.seek(0,relative=False); eof=False
                                 paused=not paused; player.set_pause(paused)
+                                self.publish((token,'state',(None,player.get_pts(),duration,paused)))
                             elif kind=='seek':
                                 player.seek(float(value),relative=False); eof=False
                                 player.set_pause(False); first=True
                             elif kind=='restart':
                                 player.seek(0,relative=False); player.set_pause(False)
                                 paused=False; first=False; eof=False
-                            elif kind=='mute': player.set_mute(bool(value))
+                            elif kind=='mute':
+                                muted=bool(value); player.set_mute(muted)
                     except Exception as exc:
                         self.publish((generation,'error',str(exc)))
                         if player: player.close_player(); player=None
@@ -70,7 +72,7 @@ class PreviewEngine:
                         pixels,pts=frame
                         image=Image.frombytes('RGB',pixels.get_size(),bytes(pixels.to_bytearray()[0]))
                         if first:
-                            player.set_pause(True); player.set_mute(False)
+                            player.set_pause(True); player.set_mute(muted)
                             first=False; paused=True
                         if token==self.generation:
                             self.publish((token,'state',(image,pts,duration,paused)))
