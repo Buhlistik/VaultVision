@@ -143,7 +143,6 @@ def build_ui(app):
     def update_delay(*args):
         delay_label.configure(text='Save delay: '+app.after.get()+' seconds')
     app.after.trace_add('write',update_delay); update_delay()
-    ttk.Button(left,text='Edit capture settings',command=open_settings).pack(fill='x')
     tk.Frame(left,bg=EDGE,height=1).pack(fill='x',pady=16)
     label(left,'OBS REPLAY BUFFER',GOLD,('Segoe UI',9,'bold')).pack(anchor='w')
     app.replay_label=label(left,'Checking OBS duration…',TEXT,('Segoe UI',12))
