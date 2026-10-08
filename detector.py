@@ -42,7 +42,7 @@ def ocr(image, executable='tesseract', psm=6):
 def normalized(s): return re.sub(r'[^a-z0-9]','',s.lower())
 def parse_feed(text):
     for line in text.splitlines():
-        m=re.search(r'^\s*(.+?)\s+killed\s+([^()]+?)(?:\s*\(([^)]+)\)|$)',line,re.I)
+        m=re.search(r'^\s*(.+?)\s+killed\s+([^()\[\]]+?)(?:\s*[\[(]([^\])]+)[\])]|$)',line,re.I)
         if m: yield {'killer':m[1].strip(),'victim':m[2].strip(),'weapon':(m[3] or '').strip()}
 class Detector:
     def __init__(self, name=''):
@@ -62,7 +62,7 @@ class Detector:
             key=(normalized(e['killer']),normalized(e['victim']))
             if key in self.seen: self.seen[key]=now; continue
             current[key]=self.pending.get(key,0)+1
-            if current[key]>=2:
+            if current[key]>=1:
                 self.seen[key]=now; e.update(kind=role,time=now); events.append(e)
                 if role=='death': self.dead=True
         self.pending=current
