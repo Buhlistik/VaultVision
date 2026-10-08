@@ -42,26 +42,28 @@ class App:
             obs.request('GetSourceScreenshot',sourceName=source,imageFormat='png',imageWidth=1920,imageHeight=1080)
             self.say('Armed. Capture must show your gameplay, with the complete HUD.')
             while not self.stop.is_set():
-                now=time.monotonic()
+                now=time.monotonic(); scan_started=now
                 if self.manual.is_set():
                     self.manual.clear(); obs.request('SaveReplayBuffer'); self.say('Manual replay save requested.')
                 if due is not None and now>=due:
                     obs.request('SaveReplayBuffer'); self.say('Event replay save requested; check the OBS output folder.'); due=None
                 data=obs.request('GetSourceScreenshot',sourceName=source,imageFormat='png',imageWidth=1920,imageHeight=1080)['imageData']
                 image=Image.open(io.BytesIO(base64.b64decode(data.split(',',1)[1])))
-                if not name and scans%2==0: detector.update_name(ocr(crop(image,NAME),executable,7))
+                if not name and (not detector.name or scans%10==0): detector.update_name(ocr(crop(image,NAME),executable,7))
                 if detector.name!=last_name: last_name=detector.name; self.say('Active character: '+last_name)
                 for event in detector.process(ocr(crop(image,FEED),executable),time.monotonic()):
                     self.say(f"{event['kind'].upper()}: {event['killer']} → {event['victim']} ({event['weapon']})")
                     # Keep the first save deadline so rapid kills cannot evict its pre-roll.
                     if due is None: due=time.monotonic()+delay
                 scans+=1
+                elapsed=time.monotonic()-scan_started
+                if scans==1 or scans%20==0: self.say(f'Scan time: {elapsed:.2f}s; monitoring all 10 feed rows.')
                 if detector.dead:
                     self.say('Death detected: identity frozen. Disarm before spectating; re-arm for next match.')
                     if due is not None:
                         if not self.stop.wait(max(0,due-time.monotonic())): obs.request('SaveReplayBuffer'); self.say('Death replay save requested.')
                     break
-                self.stop.wait(.5)
+                self.stop.wait(max(0,.5-(time.monotonic()-scan_started)))
         except Exception as e: self.say('Stopped: '+str(e))
         finally:
             if obs: obs.close()
