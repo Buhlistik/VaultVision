@@ -8,7 +8,7 @@ from PIL import ImageTk
 from local_settings import password_path
 from preview_engine import PreviewEngine
 
-BG='#171a1f'; INK='#e7dfcd'; MUTED='#92979f'; GOLD='#c7a96b'
+BG='#484138'; INK='#e1dacb'; MUTED='#c0b8aa'; GOLD='#e6d58a'
 def clock(seconds):
     value=max(0,int(seconds or 0)) if math.isfinite(float(seconds or 0)) else 0; return f'{value//60}:{value%60:02d}'
 
@@ -26,13 +26,13 @@ class ClipGallery:
         except (OSError,ValueError): self.records=[]
         outer=tk.Frame(parent,bg=BG,padx=18,pady=18); outer.pack(fill='both',expand=True)
         header=tk.Frame(outer,bg=BG); header.pack(fill='x')
-        tk.Label(header,text='CLIP VAULT',bg=BG,fg=INK,font=('Segoe UI',14,'bold')).pack(side='left')
-        self.count=tk.Label(header,bg=BG,fg=MUTED,font=('Segoe UI',10)); self.count.pack(side='right')
-        self.title=tk.Label(outer,text='Your combat highlights',bg=BG,fg=MUTED,font=('Segoe UI',10),anchor='w')
+        tk.Label(header,text='◆  Combat Archives  ◆',bg=BG,fg=INK,font=('Georgia',14,'bold')).pack(side='left')
+        self.count=tk.Label(header,bg=BG,fg=MUTED,font=('Georgia',10)); self.count.pack(side='right')
+        self.title=tk.Label(outer,text='Your combat highlights',bg=BG,fg=MUTED,font=('Georgia',10),anchor='w')
         self.title.pack(fill='x',pady=(5,16))
-        self.viewport=tk.Frame(outer,bg='#080a0d',height=300); self.viewport.pack(fill='both',expand=True)
+        self.viewport=tk.Frame(outer,bg='#0b0b0a',height=300); self.viewport.pack(fill='both',expand=True)
         self.viewport.pack_propagate(False)
-        self.screen=tk.Label(self.viewport,text='Select a clip below',bg='#080a0d',fg=MUTED,font=('Segoe UI',12))
+        self.screen=tk.Label(self.viewport,text='Select a clip below',bg='#0b0b0a',fg=MUTED,font=('Georgia',12))
         self.screen.pack(fill='both',expand=True); self.screen.bind('<Configure>',self.resize)
         self.screen.bind('<Button-1>',lambda e:self.toggle())
         self.timeline=tk.Canvas(outer,height=20,bg=BG,highlightthickness=0,cursor='hand2')
@@ -42,28 +42,28 @@ class ClipGallery:
         self.timeline.bind('<ButtonRelease-1>',self.seek_at)
         bar=tk.Frame(outer,bg=BG); bar.pack(fill='x',pady=(0,14))
         def button(text,command):
-            b=tk.Button(bar,text=text,command=command,bg='#252931',fg=INK,
-                        activebackground='#373b44',activeforeground=INK,relief='flat',
-                        bd=0,padx=12,pady=7,cursor='hand2',font=('Segoe UI',10))
+            b=tk.Button(bar,text=text,command=command,bg='#302d28',fg=INK,
+                        activebackground='#51493c',activeforeground=INK,relief='flat',
+                        bd=0,padx=12,pady=7,cursor='hand2',font=('Georgia',10))
             b.pack(side='left',padx=(0,6)); return b
         self.play=button('▶  Play',self.toggle); self.play.configure(state='disabled')
         button('↺',self.restart); self.mute_button=button('Mute',self.mute)
         self.volume_slider=tk.Scale(bar,from_=0,to=1,resolution=.05,orient='horizontal',
                     variable=self.volume,command=self.change_volume,length=70,
-                    showvalue=False,bg=BG,troughcolor='#34383f',highlightthickness=0,
+                    showvalue=False,bg=BG,troughcolor='#807666',highlightthickness=0,
                     activebackground=GOLD,bd=0,sliderlength=10)
         self.volume_slider.pack(side='left',padx=5)
-        self.time=tk.Label(bar,text='0:00 / 0:00',bg=BG,fg=MUTED,font=('Segoe UI',10)); self.time.pack(side='right')
+        self.time=tk.Label(bar,text='0:00 / 0:00',bg=BG,fg=MUTED,font=('Georgia',10)); self.time.pack(side='right')
         tools=tk.Frame(outer,bg=BG); tools.pack(fill='x',pady=(6,8))
-        tk.Label(tools,text='RECENT CLIPS',bg=BG,fg=GOLD,font=('Segoe UI',9,'bold')).pack(side='left')
+        tk.Label(tools,text='Saved Replays',bg=BG,fg=GOLD,font=('Georgia',9,'bold')).pack(side='left')
         tk.Button(tools,text='+ Import',command=self.import_clips,bg=BG,fg=INK,
                   activebackground=BG,activeforeground=GOLD,bd=0,cursor='hand2').pack(side='right')
         tk.Button(tools,text='Open folder',command=self.open_folder,bg=BG,fg=MUTED,
                   activebackground=BG,activeforeground=GOLD,bd=0,cursor='hand2').pack(side='right',padx=10)
         style=ttk.Style(parent)
-        style.configure('Clips.Treeview',background='#13161b',fieldbackground='#13161b',foreground=INK,
-                        rowheight=38,borderwidth=0,font=('Segoe UI',10))
-        style.map('Clips.Treeview',background=[('selected','#34312b')],foreground=[('selected','#f2e3c5')])
+        style.configure('Clips.Treeview',background='#25221d',fieldbackground='#25221d',foreground=INK,
+                        rowheight=38,borderwidth=0,font=('Georgia',10))
+        style.map('Clips.Treeview',background=[('selected','#66583a')],foreground=[('selected','#f2e3c5')])
         listing=tk.Frame(outer,bg=BG); listing.pack(fill='x')
         self.list=ttk.Treeview(listing,show='tree',height=5,selectmode='browse',style='Clips.Treeview')
         self.list.column('#0',width=300,stretch=True)
@@ -142,7 +142,7 @@ class ClipGallery:
         if self.image is not None: self.render()
     def draw_progress(self):
         canvas=self.timeline; canvas.delete('all'); width=max(1,canvas.winfo_width())
-        canvas.create_line(0,10,width,10,fill='#34383f',width=3)
+        canvas.create_line(0,10,width,10,fill='#807666',width=3)
         x=width*min(1,(self.scrub_position if self.scrubbing else self.position)/self.duration) if self.duration else 0
         canvas.create_line(0,10,x,10,fill=GOLD,width=3)
         canvas.create_oval(x-4,6,x+4,14,fill=GOLD,outline='')
