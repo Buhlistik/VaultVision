@@ -4,6 +4,7 @@ from tkinter import ttk
 from PIL import Image
 from detector import Detector,crop,ocr,FEED,NAME
 from obs_client import OBS
+from screen_reader import ScreenReader,replay_description
 from game_state import GameGate,read_name,spectator_present,health_present,SPECTATOR
 from local_settings import load_password,save_password,password_path,load_settings,save_settings
 import os,math,re
@@ -43,6 +44,13 @@ class App:
                     connection=OBS(self.obs_password)
                     if not self.shutdown.is_set() and not connection.request('GetReplayBufferStatus')['outputActive']:
                         connection.request('StartReplayBuffer')
+                    try:
+                        seconds=replay_description(connection)
+                        self.say(f'OBS replay duration: {seconds} seconds.')
+                        if seconds<60:
+                            self.say('Short replay buffer: set OBS Settings > Output > Replay Buffer > Maximum Replay Time to 60 seconds or more. A short buffer can lose the kill before recognition.')
+                    except Exception as exc:
+                        self.say('Could not check OBS replay duration: '+str(exc))
                     self.say('OBS replay buffer ready.'); self.obs_ready=True
                     last_error=''
                 try:
@@ -90,6 +98,8 @@ class App:
             self.log.configure(state='normal'); text=self.messages.get()
             tag='error' if 'Stopped:' in text or 'Could not' in text else 'kill' if 'KILL:' in text or 'DEATH:' in text else ''
             self.log.insert('end',text+'\n',tag)
+            if 'OBS replay duration: ' in text:
+                self.replay_label.configure(text=text.split('OBS replay duration: ',1)[1])
             if 'Active character: ' in text: self.character_label.configure(text='Character: '+text.split('Active character: ',1)[1])
             self.log.configure(state='normal'); self.log.see('end'); self.log.configure(state='disabled')
         if self.obs_ready and not self.auto_started and not getattr(self,'closing',False):
@@ -111,7 +121,7 @@ class App:
         args=(self.source.get(),self.password.get(),self.name.get(),delay,self.tesseract.get(),timeout)
         self.auto_started=True; self.stop.clear(); self.manual.clear(); self.worker=threading.Thread(target=self.run,args=args,daemon=True); self.worker.start()
     def run(self,source,password,name,delay,executable,timeout):
-        obs=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; gate=GameGate(missing_seconds=timeout)
+        obs=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0; gate=GameGate(missing_seconds=timeout); reader=ScreenReader()
         try:
             obs=OBS(password)
             if not obs.request('GetReplayBufferStatus')['outputActive']: obs.request('StartReplayBuffer')
@@ -126,10 +136,9 @@ class App:
                 data=obs.request('GetSourceScreenshot',sourceName=source,imageFormat='png',imageWidth=1920,imageHeight=1080)['imageData']
                 capture_done=time.monotonic()
                 image=Image.open(io.BytesIO(base64.b64decode(data.split(',',1)[1])))
-                # Check spectator controls before accepting any HUD name.
-                spectator=spectator_present(ocr(crop(image,SPECTATOR),executable,6))
-                hud_name='' if spectator else read_name(image,executable)
-                health=health_present(image)
+                feed_started=time.monotonic()
+                # Run feed OCR alongside the HUD checks, then gate events.
+                hud_name,health,spectator,feed_text=reader.read(image,executable,gate.armed)
                 was_armed=gate.armed
                 armed,changed,reason=gate.update(hud_name,health,spectator,time.monotonic())
                 self.game_armed=armed
@@ -137,10 +146,9 @@ class App:
                 if armed and not was_armed:
                     detector=Detector(name or hud_name)
                     self.say('Active character: '+detector.name); last_name=detector.name
-                feed_started=time.monotonic()
                 events=[]
                 if armed or (was_armed and spectator):
-                    feed_text=ocr(crop(image,FEED),executable)
+                    if not was_armed: feed_text=ocr(crop(image,FEED),executable)
                     events=detector.process(feed_text,time.monotonic())
                     if spectator:
                         events=[event for event in events if event['kind']=='death']
@@ -161,12 +169,13 @@ class App:
                 scans+=1
                 elapsed=time.monotonic()-scan_started
                 if scans==1 or scans%20==0 or events:
-                    self.say(f'Scan: {elapsed:.2f}s; capture: {capture_done-scan_started:.2f}s; feed OCR: {feed_done-feed_started:.2f}s; feed lines: {len(feed_text.splitlines())}.')
+                    self.say(f'Scan: {elapsed:.2f}s; capture: {capture_done-scan_started:.2f}s; parallel OCR checks: {feed_done-feed_started:.2f}s; feed lines: {len(feed_text.splitlines())}.')
                 if elapsed>3 and scans%20==0: self.say('Slow scanning: recognition can lag. Send this timing log with the clip.')
                 self.stop.wait(max(0,.5-(time.monotonic()-scan_started)))
         except Exception as e: self.say('Stopped: '+str(e))
         finally:
             self.game_armed=False
+            reader.close()
             if obs: obs.close()
             self.say('Disarmed. OBS replay buffer remains under your control.')
     def close(self):
