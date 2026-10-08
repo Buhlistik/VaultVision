@@ -9,13 +9,58 @@ import os
 
 class App:
     def __init__(self,root):
-        self.root=root; root.title('VaultVision 0.1 — prototype'); self.stop=threading.Event(); self.manual=threading.Event(); self.messages=queue.Queue(); self.worker=None
+        self.root=root; root.title('VaultVision 0.1 — prototype'); self.stop=threading.Event(); self.manual=threading.Event(); self.messages=queue.Queue(); self.worker=None; self.shutdown=threading.Event(); self.saved_clips=queue.Queue(); self.clip_labels=queue.Queue(); self.obs_password='' 
         self.source=tk.StringVar(value='Dark and Darker'); self.password=tk.StringVar(); self.name=tk.StringVar(); self.after=tk.StringVar(value='0'); self.tesseract=tk.StringVar(value=r'C:\Program Files\Tesseract-OCR\tesseract.exe')
         try: self.password.set(load_password())
         except (OSError,UnicodeError): self.messages.put('Could not load the local password file; enter the password manually.')
         from ui_theme import build_ui
         build_ui(self)
         root.protocol('WM_DELETE_WINDOW',self.close); root.after(100,self.poll)
+        self.obs_password=self.password.get()
+        threading.Thread(target=self.watch_obs,daemon=True).start()
+    def watch_obs(self):
+        from obs_launcher import launch_obs
+        from pathlib import Path
+        try:
+            launched=launch_obs()
+            self.say('Starting OBS with replay buffer, minimized to tray.' if launched else 'OBS is already running; reusing it.')
+        except Exception as exc:
+            self.say('Could not launch OBS: '+str(exc))
+        last_path=''; last_error=''; connection=None
+        while not self.shutdown.is_set():
+            try:
+                if connection is None:
+                    connection=OBS(self.obs_password)
+                    if not connection.request('GetReplayBufferStatus')['outputActive']:
+                        connection.request('StartReplayBuffer')
+                    self.say('OBS replay buffer ready.')
+                    last_error=''
+                try:
+                    path=connection.request('GetLastReplayBufferReplay').get('savedReplayPath','')
+                except RuntimeError as exc:
+                    # OBS has no last replay until the first completed save.
+                    if 'No replay' in str(exc) or 'not saved' in str(exc).lower() or 'no saved' in str(exc).lower():
+                        path=''
+                    else: raise
+                if path and path!=last_path and Path(path).is_file():
+                    label='Replay'
+                    if not self.clip_labels.empty(): label=self.clip_labels.get()
+                    self.saved_clips.put((path,label)); last_path=path
+            except Exception as exc:
+                if connection:
+                    connection.close(); connection=None
+                text=str(exc)
+                if text!=last_error: self.say('OBS setup: '+text); last_error=text
+            self.shutdown.wait(2)
+        if connection: connection.close()
+    def request_save(self,obs,label):
+        self.clip_labels.put(label)
+        try: obs.request('SaveReplayBuffer')
+        except Exception:
+            # No completed file is expected for a rejected request.
+            try: self.clip_labels.get_nowait()
+            except queue.Empty: pass
+            raise
     def store_password(self):
         try:
             save_password(self.password.get())
@@ -28,6 +73,9 @@ class App:
         except (OSError,AttributeError,UnicodeError): self.say('Could not open the password file: '+str(password_path()))
     def say(self,text): self.messages.put(time.strftime('%H:%M:%S')+' '+text)
     def poll(self):
+        self.obs_password=self.password.get()
+        while not self.saved_clips.empty():
+            path,label=self.saved_clips.get(); self.gallery.add(path,label)
         while not self.messages.empty():
             self.log.configure(state='normal'); text=self.messages.get()
             tag='error' if 'Stopped:' in text or 'Could not' in text else 'kill' if 'KILL:' in text or 'DEATH:' in text else ''
@@ -48,18 +96,18 @@ class App:
         args=(self.source.get(),self.password.get(),self.name.get(),delay,self.tesseract.get())
         self.stop.clear(); self.manual.clear(); self.worker=threading.Thread(target=self.run,args=args,daemon=True); self.worker.start()
     def run(self,source,password,name,delay,executable):
-        obs=None; due=None; detector=Detector(name); last_name=''; scans=0
+        obs=None; due=None; due_label='Replay'; detector=Detector(name); last_name=''; scans=0
         try:
             obs=OBS(password)
-            if not obs.request('GetReplayBufferStatus')['outputActive']: raise RuntimeError('Start the OBS Replay Buffer before arming.')
+            if not obs.request('GetReplayBufferStatus')['outputActive']: obs.request('StartReplayBuffer')
             obs.request('GetSourceScreenshot',sourceName=source,imageFormat='png',imageWidth=1920,imageHeight=1080)
             self.say(f'Armed. Replay save delay: {delay:.1f}s. Capture must show the complete HUD.')
             while not self.stop.is_set():
                 now=time.monotonic(); scan_started=now
                 if self.manual.is_set():
-                    self.manual.clear(); obs.request('SaveReplayBuffer'); self.say('Manual replay save requested.')
+                    self.manual.clear(); self.request_save(obs,'Manual'); self.say('Manual replay save requested.')
                 if due is not None and now>=due:
-                    obs.request('SaveReplayBuffer'); self.say('Event replay save requested; check the OBS output folder.'); due=None
+                    self.request_save(obs,due_label); self.say('Event replay save requested; check the OBS output folder.'); due=None
                 data=obs.request('GetSourceScreenshot',sourceName=source,imageFormat='png',imageWidth=1920,imageHeight=1080)['imageData']
                 capture_done=time.monotonic()
                 image=Image.open(io.BytesIO(base64.b64decode(data.split(',',1)[1])))
@@ -73,8 +121,9 @@ class App:
                     self.say(f"{event['kind'].upper()}: {event['killer']} → {event['victim']} ({event['weapon']})")
                     # Keep the first save deadline so rapid kills cannot evict its pre-roll.
                     if delay==0:
-                        obs.request('SaveReplayBuffer'); self.say('Immediate event replay save requested.')
-                    elif due is None: due=time.monotonic()+delay
+                        self.request_save(obs,event['kind'].title()+': '+event['killer']+' → '+event['victim']); self.say('Immediate event replay save requested.')
+                    elif due is None:
+                        due=time.monotonic()+delay; due_label=event['kind'].title()+': '+event['killer']+' → '+event['victim']
                 scans+=1
                 elapsed=time.monotonic()-scan_started
                 if scans==1 or scans%20==0 or events:
@@ -83,13 +132,14 @@ class App:
                 if detector.dead:
                     self.say('Death detected: identity frozen. Disarm before spectating; re-arm for next match.')
                     if due is not None:
-                        if not self.stop.wait(max(0,due-time.monotonic())): obs.request('SaveReplayBuffer'); self.say('Death replay save requested.')
+                        if not self.stop.wait(max(0,due-time.monotonic())): self.request_save(obs,due_label); self.say('Death replay save requested.')
                     break
                 self.stop.wait(max(0,.5-(time.monotonic()-scan_started)))
         except Exception as e: self.say('Stopped: '+str(e))
         finally:
             if obs: obs.close()
             self.say('Disarmed. OBS replay buffer remains under your control.')
-    def close(self): self.stop.set(); self.root.destroy()
+    def close(self):
+        self.stop.set(); self.shutdown.set(); self.gallery.close(); self.root.destroy()
 if __name__=='__main__':
     root=tk.Tk(); App(root); root.mainloop()
